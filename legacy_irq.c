@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/legacy_irq.c 257396 2013-10-30 20:42:09Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/legacy_irq.c 257396 2013-10-30 20:42:09Z neel $
  */
 
 #include <stdbool.h>

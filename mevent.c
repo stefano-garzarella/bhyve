@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/mevent.c 259496 2013-12-17 06:39:48Z grehan $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/mevent.c 261090 2014-01-23 20:35:32Z jhb $
  */
 
 /*
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: release/10.0.0/usr.sbin/bhyve/mevent.c 259496 2013-12-17 06:39:48Z grehan $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/mevent.c 261090 2014-01-23 20:35:32Z jhb $");
 
 #include <assert.h>
 #include <errno.h>
@@ -134,6 +134,9 @@ mevent_kq_filter(struct mevent *mevp)
 
 	if (mevp->me_type == EVF_TIMER)
 		retval = EVFILT_TIMER;
+
+	if (mevp->me_type == EVF_SIGNAL)
+		retval = EVFILT_SIGNAL;
 
 	return (retval);
 }
@@ -437,7 +440,7 @@ mevent_dispatch(void)
 		 * Block awaiting events
 		 */
 		ret = kevent(mfd, NULL, 0, eventlist, MEVENT_MAX, NULL);
-		if (ret == -1) {
+		if (ret == -1 && errno != EINTR) {
 			perror("Error return from kevent monitor");
 		}
 		

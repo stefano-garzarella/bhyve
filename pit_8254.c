@@ -23,11 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/pit_8254.c 259496 2013-12-17 06:39:48Z grehan $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/pit_8254.c 261265 2014-01-29 13:35:12Z jhb $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: release/10.0.0/usr.sbin/bhyve/pit_8254.c 259496 2013-12-17 06:39:48Z grehan $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/pit_8254.c 261265 2014-01-29 13:35:12Z jhb $");
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -42,10 +42,11 @@ __FBSDID("$FreeBSD: release/10.0.0/usr.sbin/bhyve/pit_8254.c 259496 2013-12-17 0
 
 #include <vmmapi.h>
 
+#include "acpi.h"
 #include "bhyverun.h"
 #include "inout.h"
-#include "ioapic.h"
 #include "mevent.h"
+#include "pci_lpc.h"
 #include "pit_8254.h"
 
 #define	TIMER_SEL_MASK		0xc0
@@ -106,8 +107,7 @@ pit_mevent_cb(int fd, enum ev_type type, void *param)
 
 	pit_mev_count++;
 
-	ioapic_assert_pin(c->ctx, 2);
-	ioapic_deassert_pin(c->ctx, 2);
+	vm_ioapic_pulse_irq(c->ctx, 2);
 
 	/*
 	 * Delete the timer for one-shots
@@ -270,3 +270,22 @@ INOUT_PORT(8254, TIMER_MODE, IOPORT_F_OUT, pit_8254_handler);
 INOUT_PORT(8254, TIMER_CNTR0, IOPORT_F_INOUT, pit_8254_handler);
 INOUT_PORT(8254, TIMER_CNTR1, IOPORT_F_INOUT, pit_8254_handler);
 INOUT_PORT(8254, TIMER_CNTR2, IOPORT_F_INOUT, pit_8254_handler);
+
+static void
+pit_dsdt(void)
+{
+
+	dsdt_line("");
+	dsdt_line("Device (TIMR)");
+	dsdt_line("{");
+	dsdt_line("  Name (_HID, EisaId (\"PNP0100\"))");
+	dsdt_line("  Name (_CRS, ResourceTemplate ()");
+	dsdt_line("  {");
+	dsdt_indent(2);
+	dsdt_fixed_ioport(IO_TIMER1, 4);
+	dsdt_fixed_irq(0);
+	dsdt_unindent(2);
+	dsdt_line("  })");
+	dsdt_line("}");
+}
+LPC_DSDT(pit_dsdt);

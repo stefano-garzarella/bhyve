@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/pci_emul.h 257396 2013-10-30 20:42:09Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/pci_emul.h 262350 2014-02-23 00:46:05Z jhb $
  */
 
 #ifndef _PCI_EMUL_H_
@@ -50,6 +50,9 @@ struct pci_devemu {
 	/* instance creation */
 	int       (*pe_init)(struct vmctx *, struct pci_devinst *,
 			     char *opts);
+
+	/* ACPI DSDT enumeration */
+	void	(*pe_write_dsdt)(struct pci_devinst *);
 
 	/* config space read/write callbacks */
 	int	(*pe_cfgwrite)(struct vmctx *ctx, int vcpu,
@@ -104,14 +107,15 @@ struct pci_devinst {
 	struct vmctx *pi_vmctx;
 	uint8_t	  pi_bus, pi_slot, pi_func;
 	int8_t    pi_lintr_pin;
+	int8_t	  pi_lintr_state;
 	char	  pi_name[PI_NAMESZ];
 	int	  pi_bar_getsize;
 
 	struct {
-		int	enabled;
-		int	cpu;
-		int	vector;
-		int	msgnum;
+		int		enabled;
+		uint64_t	addr;
+		uint64_t	msg_data;
+		int		maxmsgnum;
 	} pi_msi;
 
 	struct {
@@ -212,6 +216,7 @@ int	pci_emul_add_msixcap(struct pci_devinst *pi, int msgnum, int barnum);
 int	pci_emul_msix_twrite(struct pci_devinst *pi, uint64_t offset, int size,
 			     uint64_t value);
 uint64_t pci_emul_msix_tread(struct pci_devinst *pi, uint64_t offset, int size);
+void	pci_write_dsdt(void);
 
 static __inline void 
 pci_set_cfgdata8(struct pci_devinst *pi, int offset, uint8_t val)

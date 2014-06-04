@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/inout.h 257396 2013-10-30 20:42:09Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/inout.h 261090 2014-01-23 20:35:32Z jhb $
  */
 
 #ifndef _INOUT_H_
@@ -32,6 +32,12 @@
 #include <sys/linker_set.h>
 
 struct vmctx;
+
+/* Handler return values. */
+#define	INOUT_ERROR	-1
+#define	INOUT_OK	0
+#define	INOUT_RESET	1
+#define	INOUT_POWEROFF	2
 
 typedef int (*inout_func_t)(struct vmctx *ctx, int vcpu, int in, int port,
 			    int bytes, uint32_t *eax, void *arg);

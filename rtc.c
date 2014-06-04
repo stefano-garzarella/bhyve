@@ -23,11 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/rtc.c 256755 2013-10-18 22:05:17Z grehan $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/rtc.c 261265 2014-01-29 13:35:12Z jhb $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: release/10.0.0/usr.sbin/bhyve/rtc.c 256755 2013-10-18 22:05:17Z grehan $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/rtc.c 261265 2014-01-29 13:35:12Z jhb $");
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -40,7 +40,9 @@ __FBSDID("$FreeBSD: release/10.0.0/usr.sbin/bhyve/rtc.c 256755 2013-10-18 22:05:
 #include <machine/vmm.h>
 #include <vmmapi.h>
 
+#include "acpi.h"
 #include "inout.h"
+#include "pci_lpc.h"
 #include "rtc.h"
 
 #define	IO_RTC	0x70
@@ -358,3 +360,24 @@ rtc_init(struct vmctx *ctx)
 
 INOUT_PORT(rtc, IO_RTC, IOPORT_F_INOUT, rtc_addr_handler);
 INOUT_PORT(rtc, IO_RTC + 1, IOPORT_F_INOUT, rtc_data_handler);
+
+static void
+rtc_dsdt(void)
+{
+
+	dsdt_line("");
+	dsdt_line("Device (RTC)");
+	dsdt_line("{");
+	dsdt_line("  Name (_HID, EisaId (\"PNP0B00\"))");
+	dsdt_line("  Name (_CRS, ResourceTemplate ()");
+	dsdt_line("  {");
+	dsdt_indent(2);
+	dsdt_fixed_ioport(IO_RTC, 2);
+	dsdt_fixed_irq(8);
+	dsdt_unindent(2);
+	dsdt_line("  })");
+	dsdt_line("}");
+}
+LPC_DSDT(rtc_dsdt);
+
+SYSRES_IO(0x72, 6);

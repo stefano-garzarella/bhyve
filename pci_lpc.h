@@ -23,11 +23,47 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/pci_lpc.h 257396 2013-10-30 20:42:09Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/pci_lpc.h 261265 2014-01-29 13:35:12Z jhb $
  */
 
 #ifndef _LPC_H_
 #define	_LPC_H_
+
+#include <sys/linker_set.h>
+
+typedef void (*lpc_write_dsdt_t)(void);
+
+struct lpc_dsdt {
+	lpc_write_dsdt_t handler;
+};
+
+#define	LPC_DSDT(handler)						\
+	static struct lpc_dsdt __CONCAT(__lpc_dsdt, __LINE__) = {	\
+		(handler),						\
+	};								\
+	DATA_SET(lpc_dsdt_set, __CONCAT(__lpc_dsdt, __LINE__))
+
+enum lpc_sysres_type {
+	LPC_SYSRES_IO,
+	LPC_SYSRES_MEM
+};
+
+struct lpc_sysres {
+	enum lpc_sysres_type type;
+	uint32_t base;
+	uint32_t length;
+};
+
+#define	LPC_SYSRES(type, base, length)					\
+	static struct lpc_sysres __CONCAT(__lpc_sysres, __LINE__) = {	\
+		(type),							\
+		(base),							\
+		(length)						\
+	};								\
+	DATA_SET(lpc_sysres_set, __CONCAT(__lpc_sysres, __LINE__))
+
+#define	SYSRES_IO(base, length)		LPC_SYSRES(LPC_SYSRES_IO, base, length)
+#define	SYSRES_MEM(base, length)	LPC_SYSRES(LPC_SYSRES_MEM, base, length)
 
 int	lpc_device_parse(const char *opt);
 

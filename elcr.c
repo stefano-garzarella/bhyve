@@ -23,15 +23,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/elcr.c 245678 2013-01-20 03:42:49Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/elcr.c 261265 2014-01-29 13:35:12Z jhb $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: release/10.0.0/usr.sbin/bhyve/elcr.c 245678 2013-01-20 03:42:49Z neel $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/elcr.c 261265 2014-01-29 13:35:12Z jhb $");
 
 #include <sys/types.h>
 
 #include "inout.h"
+#include "pci_lpc.h"
 
 /*
  * EISA interrupt Level Control Register.
@@ -63,3 +64,4 @@ elcr_handler(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
 }
 INOUT_PORT(elcr, ELCR_PORT + 0, IOPORT_F_INOUT, elcr_handler);
 INOUT_PORT(elcr, ELCR_PORT + 1, IOPORT_F_INOUT, elcr_handler);
+SYSRES_IO(ELCR_PORT, 2);

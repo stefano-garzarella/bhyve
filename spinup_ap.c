@@ -23,11 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/spinup_ap.c 256869 2013-10-22 00:58:51Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/spinup_ap.c 256869 2013-10-22 00:58:51Z neel $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: release/10.0.0/usr.sbin/bhyve/spinup_ap.c 256869 2013-10-22 00:58:51Z neel $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/spinup_ap.c 256869 2013-10-22 00:58:51Z neel $");
 
 #include <sys/param.h>
 #include <sys/types.h>

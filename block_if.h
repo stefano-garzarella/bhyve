@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/block_if.h 256052 2013-10-04 16:52:03Z grehan $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/block_if.h 256052 2013-10-04 16:52:03Z grehan $
  */
 
 /*

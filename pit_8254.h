@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/pit_8254.h 245678 2013-01-20 03:42:49Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/pit_8254.h 245678 2013-01-20 03:42:49Z neel $
  */
 
 #ifndef _PIT_8254_H_

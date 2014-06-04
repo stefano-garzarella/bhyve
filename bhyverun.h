@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: release/10.0.0/usr.sbin/bhyve/bhyverun.h 256869 2013-10-22 00:58:51Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/bhyverun.h 256869 2013-10-22 00:58:51Z neel $
  */
 
 #ifndef	_FBSDRUN_H_
