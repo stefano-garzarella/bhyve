@@ -23,11 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/block_if.c 259301 2013-12-13 06:59:18Z grehan $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/block_if.c 267071 2014-06-04 18:08:08Z jhb $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/block_if.c 259301 2013-12-13 06:59:18Z grehan $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/block_if.c 267071 2014-06-04 18:08:08Z jhb $");
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -50,7 +50,7 @@ __FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/block_if.c 259301 2013-12-13 06:59:
 
 #define BLOCKIF_SIG	0xb109b109
 
-#define BLOCKIF_MAXREQ	16
+#define BLOCKIF_MAXREQ	32
 
 enum blockop {
 	BOP_READ,

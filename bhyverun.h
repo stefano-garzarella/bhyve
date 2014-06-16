@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/bhyverun.h 256869 2013-10-22 00:58:51Z neel $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/bhyverun.h 267450 2014-06-13 21:30:40Z jhb $
  */
 
 #ifndef	_FBSDRUN_H_
@@ -37,6 +37,7 @@
 
 struct vmctx;
 extern int guest_ncpus;
+extern char *guest_uuid_str;
 extern char *vmname;
 
 void *paddr_guest2host(struct vmctx *ctx, uintptr_t addr, size_t len);

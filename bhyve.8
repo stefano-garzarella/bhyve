@@ -22,9 +22,9 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\" $FreeBSD: stable/10/usr.sbin/bhyve/bhyve.8 264273 2014-04-08 20:40:54Z jhb $
+.\" $FreeBSD: stable/10/usr.sbin/bhyve/bhyve.8 267447 2014-06-13 19:10:40Z jhb $
 .\"
-.Dd December 12, 2013
+.Dd January 27, 2014
 .Dt BHYVE 8
 .Os
 .Sh NAME
@@ -32,12 +32,11 @@
 .Nd "run a guest operating system inside a virtual machine"
 .Sh SYNOPSIS
 .Nm
-.Op Fl aehwAHPW
+.Op Fl aehwxAHPW
 .Op Fl c Ar numcpus
 .Op Fl g Ar gdbport
 .Op Fl p Ar pinnedcpu
 .Op Fl s Ar slot,emulation Ns Op , Ns Ar conf
-.Op Fl S Ar slot,emulation Ns Op , Ns Ar conf
 .Op Fl l Ar lpcdev Ns Op , Ns Ar conf
 .Ar vmname
 .Sh DESCRIPTION
@@ -59,7 +58,9 @@ exit is detected.
 .Sh OPTIONS
 .Bl -tag -width 10n
 .It Fl a
-Disallow use of the local APIC in X2APIC mode.
+The guest's local APIC is configured in xAPIC mode.
+The xAPIC mode is the default setting so this option is redundant. It will be
+deprecated in a future version.
 .It Fl A
 Generate ACPI tables.
 Required for
@@ -202,13 +203,6 @@ The host device must have been reserved at boot-time using the
 loader variable as described in
 .Xr vmm 4 .
 .El
-.It Fl S Ar slot , Ns Ar emulation Ns Op , Ns Ar conf
-Identical to the -s option except the device is instructed to use legacy
-ISA addresses if possible.
-Currently this only has an effect with the
-.Li uart
-device emulation.
-This option will be deprecated in a future version.
 .It Fl l Ar lpcdev Ns Op , Ns Ar conf
 Allow devices behind the LPC PCI-ISA bridge to be configured.
 The only supported devices are the TTY-class devices,
@@ -231,6 +225,8 @@ to exit when a guest issues an access to an I/O port that is not emulated.
 This is intended for debug purposes.
 .It Fl w
 Ignore accesses to unimplemented Model Specific Registers (MSRs). This is intended for debug purposes.
+.It Fl x
+The guest's local APIC is configured in x2APIC mode.
 .It Fl h
 Print help message and exit.
 .It Ar vmname

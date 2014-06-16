@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/virtio.c 266592 2014-05-23 19:06:35Z jhb $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/virtio.c 267393 2014-06-12 13:13:15Z jhb $");
 
 #include <sys/param.h>
 #include <sys/uio.h>
@@ -99,7 +99,11 @@ vi_reset_dev(struct virtio_softc *vs)
 	vs->vs_negotiated_caps = 0;
 	vs->vs_curq = 0;
 	/* vs->vs_status = 0; -- redundant */
+	VS_LOCK(vs);
+	if (vs->vs_isr)
+		pci_lintr_deassert(vs->vs_pi);
 	vs->vs_isr = 0;
+	VS_UNLOCK(vs);
 	vs->vs_msix_cfg_idx = VIRTIO_MSI_NO_VECTOR;
 }
 
@@ -137,11 +141,10 @@ vi_intr_init(struct virtio_softc *vs, int barnum, int use_msix)
 		nvec = vs->vs_vc->vc_nvq + 1;
 		if (pci_emul_add_msixcap(vs->vs_pi, nvec, barnum))
 			return (1);
-	} else {
+	} else
 		vs->vs_flags &= ~VIRTIO_USE_MSIX;
-		/* Only 1 MSI vector for bhyve */
-		pci_emul_add_msicap(vs->vs_pi, 1);
-	}
+	/* Only 1 MSI vector for bhyve */
+	pci_emul_add_msicap(vs->vs_pi, 1);
 	return (0);
 }
 
@@ -591,6 +594,8 @@ bad:
 	case VTCFG_R_ISR:
 		value = vs->vs_isr;
 		vs->vs_isr = 0;		/* a read clears this flag */
+		if (value)
+			pci_lintr_deassert(pi);
 		break;
 	case VTCFG_R_CFGVEC:
 		value = vs->vs_msix_cfg_idx;

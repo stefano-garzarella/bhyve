@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/acpi.c 262350 2014-02-23 00:46:05Z jhb $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/acpi.c 267450 2014-06-13 21:30:40Z jhb $
  */
 
 /*
@@ -39,18 +39,18 @@
  *
  *  Layout
  *  ------
- *   RSDP  ->   0xf0400    (36 bytes fixed)
- *     RSDT  ->   0xf0440    (36 bytes + 4*N table addrs, 2 used)
- *     XSDT  ->   0xf0480    (36 bytes + 8*N table addrs, 2 used)
- *       MADT  ->   0xf0500  (depends on #CPUs)
- *       FADT  ->   0xf0600  (268 bytes)
- *       HPET  ->   0xf0740  (56 bytes)
- *         FACS  ->   0xf0780 (64 bytes)
- *         DSDT  ->   0xf0800 (variable - can go up to 0x100000)
+ *   RSDP  ->   0xf2400    (36 bytes fixed)
+ *     RSDT  ->   0xf2440    (36 bytes + 4*N table addrs, 2 used)
+ *     XSDT  ->   0xf2480    (36 bytes + 8*N table addrs, 2 used)
+ *       MADT  ->   0xf2500  (depends on #CPUs)
+ *       FADT  ->   0xf2600  (268 bytes)
+ *       HPET  ->   0xf2740  (56 bytes)
+ *         FACS  ->   0xf2780 (64 bytes)
+ *         DSDT  ->   0xf2800 (variable - can go up to 0x100000)
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/acpi.c 262350 2014-02-23 00:46:05Z jhb $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/acpi.c 267450 2014-06-13 21:30:40Z jhb $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -74,7 +74,7 @@ __FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/acpi.c 262350 2014-02-23 00:46:05Z 
  * Define the base address of the ACPI tables, and the offsets to
  * the individual tables
  */
-#define BHYVE_ACPI_BASE		0xf0400
+#define BHYVE_ACPI_BASE		0xf2400
 #define RSDT_OFFSET		0x040
 #define XSDT_OFFSET		0x080
 #define MADT_OFFSET		0x100
