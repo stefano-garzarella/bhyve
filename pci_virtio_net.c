@@ -23,11 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/pci_virtio_net.c 267393 2014-06-12 13:13:15Z jhb $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/pci_virtio_net.c 268953 2014-07-21 19:08:02Z jhb $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/pci_virtio_net.c 267393 2014-06-12 13:13:15Z jhb $");
+__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/pci_virtio_net.c 268953 2014-07-21 19:08:02Z jhb $");
 
 #include <sys/param.h>
 #include <sys/linker_set.h>
@@ -513,8 +513,7 @@ pci_vtnet_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	char *vtopts;
 	int mac_provided;
 
-	sc = malloc(sizeof(struct pci_vtnet_softc));
-	memset(sc, 0, sizeof(struct pci_vtnet_softc));
+	sc = calloc(1, sizeof(struct pci_vtnet_softc));
 
 	pthread_mutex_init(&sc->vsc_mtx, NULL);
 

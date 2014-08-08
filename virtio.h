@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/virtio.h 267401 2014-06-12 15:24:33Z jhb $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/virtio.h 268933 2014-07-21 00:21:56Z jhb $
  */
 
 #ifndef	_VIRTIO_H_
@@ -209,6 +209,7 @@ struct vring_used {
 #define	VIRTIO_VENDOR		0x1AF4
 #define	VIRTIO_DEV_NET		0x1000
 #define	VIRTIO_DEV_BLOCK	0x1001
+#define	VIRTIO_DEV_RANDOM	0x1002
 
 /*
  * PCI config space constants.
