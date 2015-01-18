@@ -1,5 +1,5 @@
 #
-# $FreeBSD: stable/10/usr.sbin/bhyve/Makefile 268972 2014-07-22 03:14:37Z jhb $
+# $FreeBSD: stable/10/usr.sbin/bhyve/Makefile 276429 2014-12-30 22:22:46Z neel $
 #
 
 PROG=	bhyve
@@ -31,10 +31,10 @@ SRCS=	\
 	pci_virtio_rnd.c	\
 	pci_uart.c		\
 	pm.c			\
-	pmtmr.c			\
 	post.c			\
 	rtc.c			\
 	smbiostbl.c		\
+	task_switch.c		\
 	uart_emul.c		\
 	virtio.c		\
 	xmsr.c			\

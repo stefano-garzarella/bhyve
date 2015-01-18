@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/virtio.h 268933 2014-07-21 00:21:56Z jhb $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/virtio.h 271685 2014-09-16 19:08:54Z grehan $
  */
 
 #ifndef	_VIRTIO_H_
@@ -352,7 +352,9 @@ struct virtio_consts {
 					/* called to read config regs */
 	int	(*vc_cfgwrite)(void *, int, int, uint32_t);
 					/* called to write config regs */
-	uint32_t vc_hv_caps;		/* hypervisor-provided capabilities */
+	void    (*vc_apply_features)(void *, uint64_t);
+				/* called to apply negotiated features */
+	uint64_t vc_hv_caps;		/* hypervisor-provided capabilities */
 };
 
 /*

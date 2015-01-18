@@ -23,12 +23,13 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/xmsr.h 264273 2014-04-08 20:40:54Z jhb $
+ * $FreeBSD: stable/10/usr.sbin/bhyve/xmsr.h 276349 2014-12-28 21:27:13Z neel $
  */
 
 #ifndef	_XMSR_H_
 #define	_XMSR_H_
 
+int init_msr(void);
 int emulate_wrmsr(struct vmctx *ctx, int vcpu, uint32_t code, uint64_t val);
 int emulate_rdmsr(struct vmctx *ctx, int vcpu, uint32_t code, uint64_t *val);
 
