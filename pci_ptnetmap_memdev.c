@@ -1,3 +1,16 @@
+#include <sys/cdefs.h>
+__FBSDID("$FreeBSD$");
+
+#include <errno.h>
+//#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+//#include <string.h>
+//#include <strings.h>
+//#include <unistd.h>
+//#include <assert.h>
+
 #include "bhyverun.h"
 #include "pci_emul.h"
 
@@ -56,7 +69,9 @@ ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 		break;
 	}
 
-	printf("ptnentmap_memdev: io_read - addr: %lx size: %d ret: %lx\n", addr, size, ret);
+	printf("ptnentmap_memdev: io_read - offset: %lx size: %d ret: %lx\n", offset, size, ret);
+
+	return ret;
 }
 
 static void
@@ -73,7 +88,7 @@ ptn_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	/* XXX probably should do something better than just assert() */
 	assert(baridx == PTNETMAP_IO_PCI_BAR);
 
-	switch (addr) {
+	switch (offset) {
 
 	default:
 		printf("ptnentmap_memdev: write io reg unexpected\n");
@@ -81,7 +96,7 @@ ptn_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	}
 
 
-	printf("ptnentmap_memdev: io_write - addr: %lx size: %d val: %lx\n", addr, size, val);
+	printf("ptnentmap_memdev: io_write - offset: %lx size: %d val: %lx\n", offset, size, value);
 }
 
 static int
@@ -194,4 +209,4 @@ struct pci_devemu pci_de_ptnetmap = {
 	.pe_barwrite =	ptn_pci_write,
 	.pe_barread =	ptn_pci_read
 };
-PCI_EMUL_SET(pci_de_vnet);
+PCI_EMUL_SET(pci_de_ptnetmap);
