@@ -4,7 +4,7 @@
 
 PROG=	bhyve
 
-DEBUG_FLAGS= -g -O0 
+DEBUG_FLAGS= -g -O0
 
 MAN=	bhyve.8
 
@@ -44,9 +44,17 @@ SRCS=	\
 .PATH:	${.CURDIR}/../../sys/amd64/vmm
 SRCS+=	vmm_instruction_emul.c
 
+.ifdef CROSS_BUILD
+BASEDIR=/home/stefano/repos
+S=${BASEDIR}/freebsd
+M=${BASEDIR}/obj_head${S}/tmp/usr
+.PATH: ${S}/sys/amd64/vmm
+CFLAGS = -I${M}/include -I/${S}/sys -L${M}/lib
+.endif
+
 DPADD=	${LIBVMMAPI} ${LIBMD} ${LIBUTIL} ${LIBPTHREAD}
 LDADD=	-lvmmapi -lmd -lutil -lpthread
 
-WARNS?=	2
+WARNS?=	1
 
 .include <bsd.prog.mk>
