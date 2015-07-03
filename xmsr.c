@@ -23,11 +23,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/xmsr.c 276403 2014-12-30 08:24:14Z neel $
+ * $FreeBSD$
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/xmsr.c 276403 2014-12-30 08:24:14Z neel $");
+__FBSDID("$FreeBSD$");
 
 #include <sys/types.h>
 

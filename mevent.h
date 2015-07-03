@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/mevent.h 261090 2014-01-23 20:35:32Z jhb $
+ * $FreeBSD$
  */
 
 #ifndef	_MEVENT_H_

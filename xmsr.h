@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/xmsr.h 276349 2014-12-28 21:27:13Z neel $
+ * $FreeBSD$
  */
 
 #ifndef	_XMSR_H_

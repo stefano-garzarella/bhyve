@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: stable/10/usr.sbin/bhyve/acpi.c 276349 2014-12-28 21:27:13Z neel $
+ * $FreeBSD$
  */
 
 /*
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: stable/10/usr.sbin/bhyve/acpi.c 276349 2014-12-28 21:27:13Z neel $");
+__FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -430,7 +430,10 @@ basl_fwrite_fadt(FILE *fp)
 	EFPRINTF(fp, "\n");
 
 	EFPRINTF(fp, "[0001]\t\tValue to cause reset : 06\n");
-	EFPRINTF(fp, "[0003]\t\tReserved : 000000\n");
+	EFPRINTF(fp, "[0002]\t\tARM Flags (decoded below): 0000\n");
+	EFPRINTF(fp, "\t\t\tPSCI Compliant : 0\n");
+	EFPRINTF(fp, "\t\t\tMust use HVC for PSCI : 0\n");
+	EFPRINTF(fp, "[0001]\t\tFADT Minor Revision : 01\n");
 	EFPRINTF(fp, "[0008]\t\tFACS Address : 00000000%08X\n",
 	    basl_acpi_base + FACS_OFFSET);
 	EFPRINTF(fp, "[0008]\t\tDSDT Address : 00000000%08X\n",

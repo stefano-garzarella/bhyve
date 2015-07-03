@@ -1,5 +1,5 @@
 #
-# $FreeBSD: stable/10/usr.sbin/bhyve/Makefile 276429 2014-12-30 22:22:46Z neel $
+# $FreeBSD$
 #
 
 PROG=	bhyve
