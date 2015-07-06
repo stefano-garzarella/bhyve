@@ -11,8 +11,11 @@ __FBSDID("$FreeBSD$");
 //#include <unistd.h>
 //#include <assert.h>
 
+#include <machine/vmm.h>
+#include <vmmapi.h>
 #include "bhyverun.h"
 #include "pci_emul.h"
+#include "ptnetmap.h"
 
 
 /* ptnetmap memdev PCI-ID and PCI-BARS XXX-ste: remove*/
@@ -42,6 +45,80 @@ struct ptn_memdev_softc {
 };
 static TAILQ_HEAD(, ptn_memdev_softc) ptn_memdevs = TAILQ_HEAD_INITIALIZER(ptn_memdevs);
 
+/*
+ * find ptn_memdev through mem_id
+ */
+static struct ptn_memdev_softc *
+ptn_memdev_find_memid(uint16_t mem_id)
+{
+	struct ptn_memdev_softc *sc;
+
+	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
+		if (sc->mem_ptr != NULL && mem_id == sc->mem_id) {
+			return sc;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * find ptn_memdev that has not memory
+ */
+static struct ptn_memdev_softc *
+ptn_memdev_find_empty_mem()
+{
+	struct ptn_memdev_softc *sc;
+
+	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
+		if (sc->mem_ptr == NULL) {
+			return sc;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * find ptn_memdev that has not PCI device istance
+ */
+static struct ptn_memdev_softc *
+ptn_memdev_find_empty_pi()
+{
+	struct ptn_memdev_softc *sc;
+
+	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
+		if (sc->pi == NULL) {
+			return sc;
+		}
+	}
+
+	return NULL;
+}
+
+static struct ptn_memdev_softc *
+ptn_memdev_create()
+{
+	struct ptn_memdev_softc *sc;
+
+	sc = calloc(1, sizeof(struct ptn_memdev_softc));
+
+	if (sc != NULL) {
+		TAILQ_INSERT_TAIL(&ptn_memdevs, sc, next);
+	}
+
+	return sc;
+}
+
+static void
+ptn_memdev_delete(struct ptn_memdev_softc *sc)
+{
+	TAILQ_REMOVE(&ptn_memdevs, sc, next);
+
+	free(sc);
+}
+
+
 static uint64_t
 ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
  		int baridx, uint64_t offset, int size)
@@ -51,6 +128,7 @@ ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 
 	if (baridx == PTNETMAP_MEM_PCI_BAR) {
 		printf("ptnetmap_memdev: MEM read\n");
+		printf("ptnentmap_memdev: mem_read - offset: %lx size: %d ret: %lx\n", offset, size, ret);
 		return 0; /* XXX */
 	}
 
@@ -69,7 +147,7 @@ ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 		break;
 	}
 
-	printf("ptnentmap_memdev: io_read - offset: %lx size: %d ret: %lx\n", offset, size, ret);
+	printf("ptnentmap_memdev: io_read - offset: %lx size: %d ret: %llu\n", offset, size,(unsigned long long)ret);
 
 	return ret;
 }
@@ -100,6 +178,54 @@ ptn_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 }
 
 static int
+ptn_memdev_configure(struct ptn_memdev_softc *sc)
+{
+	int ret;
+
+	printf("ptnetmap_memdev: configuring\n");
+
+	if (sc->pi == NULL || sc->mem_ptr == NULL)
+		return 0;
+
+
+	/* init iobar */
+	ret = pci_emul_alloc_bar(sc->pi, PTNETMAP_IO_PCI_BAR, PCIBAR_IO, PTNEMTAP_IO_SIZE);
+	if (ret) {
+		printf("ptnetmap_memdev: iobar allocation error %d\n", ret);
+		return ret;
+	}
+
+
+	/* init membar */
+	/* XXX MEM64 has MEM_PREFETCH */
+	/* TODO-ste: add API to map user buffer in the guest
+	 * now there is vm_map_pptdev_mmio() but it maps only physical
+	 * page. This function is implemented in the host kernel through
+	 * sglist_append_phys().
+	 * Maybe with sglist_append_user() we can do the same for the
+	 * user buffer
+	 */
+	ret = pci_emul_alloc_bar(sc->pi, PTNETMAP_MEM_PCI_BAR, PCIBAR_MEM32, sc->mem_size);
+	if (ret) {
+		printf("ptnetmap_memdev: membar allocation error %d\n", ret);
+		return ret;
+	}
+	printf("ptnetmap_memdev: pci_addr: %llx, mem_size: %llu, mem_ptr: %p\n",
+			(unsigned long long) sc->pi->pi_bar[PTNETMAP_MEM_PCI_BAR].addr,
+			(unsigned long long) sc->mem_size, sc->mem_ptr);
+	ret = vm_map_user_buf(sc->pi->pi_vmctx, sc->pi->pi_bar[PTNETMAP_MEM_PCI_BAR].addr,
+			sc->mem_size, sc->mem_ptr);
+	if (ret) {
+		printf("ptnetmap_memdev: membar map error %d\n", ret);
+		return ret;
+	}
+
+	printf("ptnetmap_memdev: configured\n");
+
+	return 0;
+}
+
+static int
 ptn_memdev_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 {
 	struct ptn_memdev_softc *sc;
@@ -108,10 +234,13 @@ ptn_memdev_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 
 	printf("ptnetmap_memdev: loading\n");
 
-	sc = calloc(1, sizeof(struct ptn_memdev_softc));
+	sc = ptn_memdev_find_empty_pi();
 	if (sc == NULL) {
-		printf("ptnetmap_memdev: calloc error\n");
-		return (ENOMEM);
+		sc = ptn_memdev_create();
+		if (sc == NULL) {
+			printf("ptnetmap_memdev: calloc error\n");
+			return (ENOMEM);
+		}
 	}
 
 	/* link our softc in pi */
@@ -125,81 +254,64 @@ ptn_memdev_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, 1); /* XXX-ste remove? */
 	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, PTNETMAP_PCI_VENDOR_ID); /* XXX-ste remove? */
 
-	/* init iobar */
-	ret = pci_emul_alloc_bar(pi, PTNETMAP_IO_PCI_BAR, PCIBAR_IO, PTNEMTAP_IO_SIZE);
+	ret = ptn_memdev_configure(sc);
 	if (ret) {
-		printf("ptnetmap_memdev: iobar allocation error\n");
+		printf("ptnetmap_memdev: configure error\n");
 		goto err;
 	}
 
-
-	/* init membar */
-	/* XXX MEM64 has MEM_PREFETCH */
-	/* TODO-ste: add API to map user buffer in the guest
-	 * now there is vm_map_pptdev_mmio() but it maps only physical
-	 * page. This function is implemented in the host kernel through
-	 * sglist_append_phys().
-	 * Maybe with sglist_append_user() we can do the same for the
-	 * user buffer
-	 */
-
-
-	TAILQ_INSERT_TAIL(&ptn_memdevs, sc, next);
 	printf("ptnetmap_memdev: loaded\n");
 
  	return (0);
 err:
-	free(sc);
+	ptn_memdev_delete(sc);
 	pi->pi_arg = NULL;
 	return ret;
 }
 
-/*
- * find ptn_state through mem_id
- */
-static struct ptn_memdev_softc *
-ptnetmap_memdev_find(uint16_t mem_id)
-{
-	struct ptn_memdev_softc *sc;
-
-	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
-		if (mem_id == sc->mem_id) {
-			return sc;
-		}
-	}
-
-	return NULL;
-}
-
 int
-ptnetmap_memdev_create(void *mem_ptr, uint32_t mem_size, uint16_t mem_id)
+ptn_memdev_attach(void *mem_ptr, uint32_t mem_size, uint16_t mem_id)
 {
 	struct ptn_memdev_softc *sc;
-	printf("ptnetmap_memdev: creating\n");
+	int ret;
+	printf("ptnetmap_memdev: attaching\n");
 
-	if (ptnetmap_memdev_find(mem_id)) {
-		printf("ptnetmap_memdev: already created\n");
+	/* if a device with the same mem_id is already attached, we are done */
+	if (ptn_memdev_find_memid(mem_id)) {
+		printf("ptnetmap_memdev: already attched\n");
 		return 0;
 	}
 
-#if 0
-	/* TODO: find primary bus */
+	sc = ptn_memdev_find_empty_mem();
+	if (sc == NULL) {
+		sc = ptn_memdev_create();
+		if (sc == NULL) {
+			printf("ptnetmap_memdev: calloc error\n");
+			return (ENOMEM);
+		}
+	}
 
-	/* TODO: create ptnetmap PCI device */
+	sc->mem_ptr = mem_ptr;
+	sc->mem_size = mem_size;
+	sc->mem_id = mem_id;
 
-	/* TODO: set ptnetmap shared memory parameter */
-	ptn_state = PTNETMAP_MEMDEV(dev);
-	ptn_state->mem_ptr = mem_ptr;
-	ptn_state->mem_size = mem_size;
-	ptn_state->mem_id = mem_id;
+	printf("ptnetmap_memdev_attach: mem_id: %u, mem_size: %lu, mem_ptr: %p\n", mem_id,
+			(unsigned long) mem_size, mem_ptr);
 
-	/* TODO: init device */
-	qdev_init_nofail(&dev->qdev);
-#endif
+	/* TODO: configure device BARs */
+	ret = ptn_memdev_configure(sc);
+	if (ret) {
+		printf("ptnetmap_memdev: configure error\n");
+		goto err;
+	}
 
-	printf("ptnetmap_memdev: created\n");
+	printf("ptnetmap_memdev: attached\n");
 
 	return 0;
+err:
+	ptn_memdev_delete(sc);
+	sc->pi->pi_arg = NULL;
+	return ret;
 }
 
 

@@ -48,6 +48,7 @@
 #include "mevent.h"
 #include "dev/virtio/network/virtio_net.h"
 #include "net_backends.h"
+#include "ptnetmap.h"
 
 #include <sys/linker_set.h>
 
@@ -694,6 +695,125 @@ static struct net_backend netmap_backend = {
 };
 
 DATA_SET(net_backend_set, netmap_backend);
+
+
+/*
+ * The ptnetmap backend
+ */
+struct ptnetmap_priv {
+	char ifname[IFNAMSIZ];
+	struct nm_desc *nmd;
+	struct netmap_ring *rx;
+	struct netmap_ring *tx;
+	net_backend_cb_t cb;
+	void *cb_param;
+};
+
+
+
+/* The virtio-net features supported by ptnetmap. */
+
+#define VIRTIO_NET_F_PTNETMAP  0x2000000 /* ptnetmap available */
+
+#define PTNETMAP_FEATURES VIRTIO_NET_F_PTNETMAP
+
+static uint64_t
+ptnetmap_get_features(struct net_backend *be)
+{
+	return PTNETMAP_FEATURES;
+}
+
+static uint64_t
+ptnetmap_set_features(struct net_backend *be, uint64_t features)
+{
+	if (features & PTNETMAP_FEATURES) {
+		WPRINTF(("ptnetmap_set_features\n"));
+	}
+
+	return 0;
+}
+
+#define PTNETMAP_NAME_HDR	2
+
+static int
+ptnetmap_init(struct net_backend *be, const char *devname,
+			net_backend_cb_t cb, void *param)
+{
+	const char *ndname = "/dev/netmap";
+	struct ptnetmap_priv *priv = NULL;
+	struct nmreq req;
+	char tname[40];
+
+	priv = calloc(1, sizeof(struct ptnetmap_priv));
+	if (priv == NULL) {
+		WPRINTF(("Unable alloc netmap private data\n"));
+		return -1;
+	}
+	WPRINTF(("ptnetmap_init(): devname '%s'\n", devname));
+
+	strncpy(priv->ifname, devname + PTNETMAP_NAME_HDR, sizeof(priv->ifname));
+	priv->ifname[sizeof(priv->ifname) - 1] = '\0';
+
+	memset(&req, 0, sizeof(req));
+	//req.nr_flags |= NR_PASSTHROUGH_HOST;
+
+	priv->nmd = nm_open(priv->ifname, &req, NETMAP_NO_TX_POLL, NULL);
+	if (priv->nmd == NULL) {
+		WPRINTF(("Unable to nm_open(): device '%s', "
+				"interface '%s', errno (%s)\n",
+				ndname, devname, strerror(errno)));
+		goto err_open;
+	}
+#if 0
+	/* check parent (nm_desc with the same allocator already mapped) */
+	parent_nmd = netmap_find_parent(nmd);
+	/* mmap or inherit from parent */
+	if (nm_mmap(nmd, parent_nmd)) {
+	        error_report("failed to mmap %s: %s", netmap_opts->ifname, strerror(errno));
+	        nm_close(nmd);
+	        return -1;
+	}
+#endif
+
+	ptn_memdev_attach(priv->nmd->mem, priv->nmd->memsize, priv->nmd->req.nr_arg2);
+
+	priv->tx = NETMAP_TXRING(priv->nmd->nifp, 0);
+	priv->rx = NETMAP_RXRING(priv->nmd->nifp, 0);
+
+	priv->cb = cb;
+	priv->cb_param = param;
+
+	be->fd = priv->nmd->fd;
+	be->priv = priv;
+
+	return 0;
+
+err_open:
+	free(priv);
+
+	return -1;
+}
+
+static void
+ptnetmap_cleanup(struct net_backend *be)
+{
+	struct ptnetmap_priv *priv = be->priv;
+
+	if (priv) {
+		nm_close(priv->nmd);
+	}
+	be->fd = -1;
+}
+
+static struct net_backend ptnetmap_backend = {
+	.name = "ptnetmap|ptvale",
+	.init = ptnetmap_init,
+	.cleanup = ptnetmap_cleanup,
+	.get_features = ptnetmap_get_features,
+	.set_features = ptnetmap_set_features,
+};
+
+DATA_SET(net_backend_set, ptnetmap_backend);
 
 
 /*

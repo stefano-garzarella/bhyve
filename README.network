@@ -1,0 +1,122 @@
+Network frontends and backends in bhyve
+
+20140804
+
+The following is a proposal on how to implement network frontends (FE)
+and backends (BE) in bhyve, and how to interface them.
+
+We need to address the following requirements:
+1. Depending on the type of FE and BE, one may need zero or more
+   additional threads (iothreads) in charge of sending or receiving
+   packets, implementing one side of paravirtualized devices, etc.
+
+   The requirements for an intermediate thread are the following:
+
+   --- transmit ---
+    Frontend	Backend		Operations
+    non-PV	non block*	(1) all in VCPU
+    other cases			(2) notify_tx() in VCPU, I/O in thread
+
+	case 1: VCPU executes (autonomously or on kick_tx)
+		fe->fe2be();	// fill the ring
+		be->transmit();
+		fe->fe2be();	// reclaim buffers
+
+	case 2: VCPU executes (autonomously)
+		be->notify_tx();
+
+	    iothread executes
+		for (;;) {
+		    <loop or wait notify_tx>
+		    fe->fe2be();    // fill the ring
+		    be->transmit(); // e.g. txsync, write
+		    fe->fe2be();    // reclaim buffers
+		}
+
+    non blocking means that either the BE tx function is non
+    blocking, or that we have an independent notification mechanism
+    (e.g. an event loop, kevent, epoll...) to notify the FE when
+    transmit will be possible and issue a kick_tx() to the VCPU
+
+   --- receive ---
+    Backend		Operations
+    non block*		(1) all in VCPU
+    other cases		(2) all in thread
+
+	case 1: VCPU executes (autonomously or on kick_rx)
+		if (needed) fe->be2fe();	// release buffers from FE
+		be->receive();	// read or rxsync
+		if (needed) fe->be2fe();	// pass packets to FE
+	   main thread does fe->kick_rx() when data available
+
+	case 2: i/o thread executes (autonomously)
+		for (;;) {
+		    <loop or wait notify_rx>
+		    fe->be2fe();   // reclaim buffers from FE
+		    be->receive(); // read or rxsync
+		    fe->be2fe();   // pass packets to FE and kick_rx
+		}
+		/* note, in netmap be->receive() may be empty because poll()
+		 * will already fill the ring with packets.
+		 */
+
+    same as above, non blocking means that the BE will use an
+    existing mechanism to notify the FE when receive will be possible
+    and issue a kick_rx() to the VCPU
+
+2. for performance reasons, it is important that the interface between
+   FE and BE support batched transfers and asynchronous completion
+   notifications.
+
+   Given that the netmap API has the features required by #2, and that
+   netmap backends (and possibly even frontends) are going to be used
+   with bhyve, we suggest to standardize netmap as the FE-BE API
+
+In practice, the FE will need to call some BE-supplied function
+during its operation, and the same goes for the BE.
+To implement this, both entities export some information
+through descriptors visible to the other entity.
+
+Frontend descriptor
+
+    struct fe_desc {
+	...
+	int (*be2fe)(struct fe_desc *, struct netmap_ring *);
+	int (*fe2be)(struct fe_desc *, struct netmap_ring *);
+	...
+    }
+
+    fe->be2fe()
+	is invoked by the BE (when receiving from the network)
+	to move packets from the netmap ring into the FE and to release
+	completed buffers from the FE back into the netmap ring.
+	The amount of data moved can be determined by the BE by comparing
+	the ring pointers before and after the call.
+
+	Before returning, be2fe() will likely issue a kick to the VCPU
+	(e.g. an interrupt) to notify the availability of new data.
+
+	The return value may be used to indicate events that cannot
+	be represented by the ring pointers.
+
+	The function runs in the context of a thread "owned" by the BE,
+	and should implement protection against concurrent
+	activities on the FE's data structures, whereas the netmap_ring
+	is only used by this function during its execution.
+
+    fe->fe2be()
+	is it needed ?
+
+Backend descriptors
+
+    struct be_desc {
+	...
+	int (*notify_tx)(struct re_desc *, struct netmap_ring *);
+	int (*notify_rx)(struct re_desc *, struct netmap_ring *);
+	...
+    }
+
+    be->notify_tx()
+	is invoked by the ...
+
+
