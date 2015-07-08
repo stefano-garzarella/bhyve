@@ -110,6 +110,8 @@ struct net_backend {
 	 */
 	uint64_t (*set_features)(struct net_backend *be, uint64_t features);
 
+	struct ptnetmap_state * (*get_ptnetmap)(struct net_backend *be);
+
 	struct pci_vtnet_softc *sc;
 	int fd;
 	void *priv;	/* Pointer to backend-specific data. */
@@ -165,6 +167,12 @@ netbe_null_recv(struct net_backend *be, struct iovec *iov,
 	return -1; /* never called, i believe */
 }
 
+static struct ptnetmap_state *
+netbe_null_get_ptnetmap(struct net_backend *be)
+{
+	return NULL;
+}
+
 static struct net_backend null_backend = {
 	.name = "null",
 	.init = netbe_null_init,
@@ -173,6 +181,7 @@ static struct net_backend null_backend = {
 	.recv = netbe_null_recv,
 	.get_features = netbe_null_get_features,
 	.set_features = netbe_null_set_features,
+	.get_ptnetmap = netbe_null_get_ptnetmap,
 };
 
 DATA_SET(net_backend_set, null_backend);
@@ -700,13 +709,15 @@ DATA_SET(net_backend_set, netmap_backend);
 /*
  * The ptnetmap backend
  */
-struct ptnetmap_priv {
-	char ifname[IFNAMSIZ];
-	struct nm_desc *nmd;
-	struct netmap_ring *rx;
-	struct netmap_ring *tx;
-	net_backend_cb_t cb;
-	void *cb_param;
+
+#include "ptnetmap.h"
+
+struct ptnbe_priv {
+	struct netmap_priv up;
+	struct ptnetmap_state ptns;
+	int created;			/* ptnetmap kthreads created */
+	unsigned long features;		/* ptnetmap features */
+	unsigned long acked_features;	/* ptnetmap acked features */
 };
 
 
@@ -718,16 +729,16 @@ struct ptnetmap_priv {
 #define PTNETMAP_FEATURES VIRTIO_NET_F_PTNETMAP
 
 static uint64_t
-ptnetmap_get_features(struct net_backend *be)
+ptnbe_get_features(struct net_backend *be)
 {
 	return PTNETMAP_FEATURES;
 }
 
 static uint64_t
-ptnetmap_set_features(struct net_backend *be, uint64_t features)
+ptnbe_set_features(struct net_backend *be, uint64_t features)
 {
 	if (features & PTNETMAP_FEATURES) {
-		WPRINTF(("ptnetmap_set_features\n"));
+		WPRINTF(("ptnbe_set_features\n"));
 	}
 
 	return 0;
@@ -735,30 +746,34 @@ ptnetmap_set_features(struct net_backend *be, uint64_t features)
 
 #define PTNETMAP_NAME_HDR	2
 
+static void ptnbe_init_ptnetmap(struct net_backend *be);
+
 static int
-ptnetmap_init(struct net_backend *be, const char *devname,
+ptnbe_init(struct net_backend *be, const char *devname,
 			net_backend_cb_t cb, void *param)
 {
 	const char *ndname = "/dev/netmap";
-	struct ptnetmap_priv *priv = NULL;
+	struct ptnbe_priv *priv = NULL;
+	struct netmap_priv *npriv;
 	struct nmreq req;
 	char tname[40];
 
-	priv = calloc(1, sizeof(struct ptnetmap_priv));
+	priv = calloc(1, sizeof(struct ptnbe_priv));
 	if (priv == NULL) {
 		WPRINTF(("Unable alloc netmap private data\n"));
 		return -1;
 	}
-	WPRINTF(("ptnetmap_init(): devname '%s'\n", devname));
+	WPRINTF(("ptnbe_init(): devname '%s'\n", devname));
 
-	strncpy(priv->ifname, devname + PTNETMAP_NAME_HDR, sizeof(priv->ifname));
-	priv->ifname[sizeof(priv->ifname) - 1] = '\0';
+	npriv = &priv->up;
+	strncpy(npriv->ifname, devname + PTNETMAP_NAME_HDR, sizeof(npriv->ifname));
+	npriv->ifname[sizeof(npriv->ifname) - 1] = '\0';
 
 	memset(&req, 0, sizeof(req));
 	//req.nr_flags |= NR_PASSTHROUGH_HOST;
 
-	priv->nmd = nm_open(priv->ifname, &req, NETMAP_NO_TX_POLL, NULL);
-	if (priv->nmd == NULL) {
+	npriv->nmd = nm_open(npriv->ifname, &req, NETMAP_NO_TX_POLL, NULL);
+	if (npriv->nmd == NULL) {
 		WPRINTF(("Unable to nm_open(): device '%s', "
 				"interface '%s', errno (%s)\n",
 				ndname, devname, strerror(errno)));
@@ -775,16 +790,17 @@ ptnetmap_init(struct net_backend *be, const char *devname,
 	}
 #endif
 
-	ptn_memdev_attach(priv->nmd->mem, priv->nmd->memsize, priv->nmd->req.nr_arg2);
 
-	priv->tx = NETMAP_TXRING(priv->nmd->nifp, 0);
-	priv->rx = NETMAP_RXRING(priv->nmd->nifp, 0);
+	npriv->tx = NETMAP_TXRING(npriv->nmd->nifp, 0);
+	npriv->rx = NETMAP_RXRING(npriv->nmd->nifp, 0);
 
-	priv->cb = cb;
-	priv->cb_param = param;
+	npriv->cb = cb;
+	npriv->cb_param = param;
 
-	be->fd = priv->nmd->fd;
+	be->fd = npriv->nmd->fd;
 	be->priv = priv;
+
+	ptnbe_init_ptnetmap(be);
 
 	return 0;
 
@@ -795,25 +811,157 @@ err_open:
 }
 
 static void
-ptnetmap_cleanup(struct net_backend *be)
+ptnbe_cleanup(struct net_backend *be)
 {
-	struct ptnetmap_priv *priv = be->priv;
+	struct ptnbe_priv *priv = be->priv;
 
 	if (priv) {
-		nm_close(priv->nmd);
+		nm_close(priv->up.nmd);
 	}
 	be->fd = -1;
 }
 
-static struct net_backend ptnetmap_backend = {
+struct ptnetmap_state *
+ptnbe_get_ptnetmap (struct net_backend *be)
+{
+	struct ptnbe_priv *priv = be->priv;
+
+	return &priv->ptns;
+}
+
+static void
+ptnbe_init_ptnetmap(struct net_backend *be)
+{
+	struct ptnbe_priv *priv = be->priv;
+
+	ptn_memdev_attach(priv->up.nmd->mem, priv->up.nmd->memsize, priv->up.nmd->req.nr_arg2);
+
+	priv->ptns.ptn_be = be;
+	priv->created = 0;
+	priv->features = NET_PTN_FEATURES_BASE;
+	priv->acked_features = 0;
+}
+
+/* return the subset of requested features that we support */
+uint32_t
+ptnetmap_get_features(struct ptnetmap_state *ptns, uint32_t features)
+{
+	struct ptnbe_priv *priv = ptns->ptn_be->priv;
+
+	return priv->features & features;
+}
+
+/* store the agreed upon features */
+void
+ptnetmap_ack_features(struct ptnetmap_state *ptns, uint32_t features)
+{
+	struct ptnbe_priv *priv = ptns->ptn_be->priv;
+
+	priv->acked_features |= features;
+}
+
+int
+ptnetmap_get_mem(struct ptnetmap_state *ptns)
+{
+	struct netmap_priv *npriv = ptns->ptn_be->priv;
+
+	if (npriv->nmd == NULL)
+		return EINVAL;
+
+	ptns->offset = npriv->nmd->req.nr_offset;
+	ptns->num_tx_rings = npriv->nmd->req.nr_tx_rings;
+	ptns->num_rx_rings = npriv->nmd->req.nr_rx_rings;
+	ptns->num_tx_slots = npriv->nmd->req.nr_tx_slots;
+	ptns->num_rx_slots = npriv->nmd->req.nr_rx_slots;
+
+	return 0;
+}
+
+int
+ptnetmap_get_hostmemid(struct ptnetmap_state *ptns)
+{
+	struct netmap_priv *npriv = ptns->ptn_be->priv;
+
+	if (npriv->nmd == NULL)
+		return EINVAL;
+
+	return npriv->nmd->req.nr_arg2;
+}
+
+int
+ptnetmap_create(struct ptnetmap_state *ptns, struct ptnetmap_cfg *conf)
+{
+	struct ptnbe_priv *priv = ptns->ptn_be->priv;
+
+	if (!(priv->acked_features & NET_PTN_FEATURES_BASE)) {
+		printf("ptnetmap features not acked\n");
+		return EFAULT;
+	}
+
+	if (priv->created)
+		return 0;
+
+	/* TODO: ioctl to start kthreads */
+#if 0
+	memset(&req, 0, sizeof(req));
+	pstrcpy(req.nr_name, sizeof(req.nr_name), s->ifname);
+	req.nr_version = NETMAP_API;
+	ptnetmap_write_cfg(&req, conf);
+	req.nr_cmd = NETMAP_PT_HOST_CREATE;
+	err = ioctl(s->nmd->fd, NIOCREGIF, &req);
+	if (err) {
+	        error_report("Unable to execute NETMAP_PT_HOST_CREATE on %s: %s",
+	                        s->ifname, strerror(errno));
+	} else
+	        ptn->created = true;
+#endif
+
+	priv->created = 1;
+
+ 	return 0;
+}
+
+int
+ptnetmap_delete(struct ptnetmap_state *ptns)
+{
+	struct ptnbe_priv *priv = ptns->ptn_be->priv;
+
+	if (!(priv->acked_features & NET_PTN_FEATURES_BASE)) {
+		printf("ptnetmap features not acked\n");
+		return EFAULT;
+	}
+
+	if (!priv->created)
+		return 0;
+
+	/* TODO: ioctl to stop kthreads */
+#if 0
+	memset(&req, 0, sizeof(req));
+	pstrcpy(req.nr_name, sizeof(req.nr_name), s->ifname);
+	req.nr_version = NETMAP_API;
+	req.nr_cmd = NETMAP_PT_HOST_DELETE;
+	err = ioctl(s->nmd->fd, NIOCREGIF, &req);
+	if (err) {
+	        error_report("Unable to execute NETMAP_PT_HOST_DELETE on %s: %s",
+	                        s->ifname, strerror(errno));
+	}
+#endif
+
+	priv->created = 0;
+
+	return 0;
+}
+
+static struct net_backend ptnbe_backend = {
 	.name = "ptnetmap|ptvale",
-	.init = ptnetmap_init,
-	.cleanup = ptnetmap_cleanup,
-	.get_features = ptnetmap_get_features,
-	.set_features = ptnetmap_set_features,
+	.init = ptnbe_init,
+	.cleanup = ptnbe_cleanup,
+	.get_features = ptnbe_get_features,
+	.set_features = ptnbe_set_features,
+	.get_ptnetmap = ptnbe_get_ptnetmap,
 };
 
-DATA_SET(net_backend_set, ptnetmap_backend);
+DATA_SET(net_backend_set, ptnbe_backend);
 
 
 /*
@@ -853,6 +1001,11 @@ netbe_fix(struct net_backend *be)
 		fprintf(stderr, "missing set_features for %p %s\n",
 			be, be->name);
 		be->set_features = netbe_null_set_features;
+	}
+	if (be->get_ptnetmap == NULL) {
+		/*fprintf(stderr, "missing set_features for %p %s\n",
+			be, be->name);*/
+		be->get_ptnetmap = netbe_null_get_ptnetmap;
 	}
 }
 
@@ -967,4 +1120,12 @@ netbe_recv(struct net_backend *be, struct iovec *iov, int iovcnt, int *more)
 	if (be == NULL)
 		return -1;
 	return be->recv(be, iov, iovcnt, more);
+}
+
+struct ptnetmap_state *
+netbe_get_ptnetmap(struct net_backend *be)
+{
+	if (be == NULL)
+		return NULL;
+	return be->get_ptnetmap(be);
 }

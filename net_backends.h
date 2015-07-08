@@ -33,6 +33,8 @@ extern int netmap_ioctl_counter;
 
 typedef void (*net_backend_cb_t)(int, enum ev_type, void *param);
 
+struct ptnetmap_state;
+
 /* Interface between virtio-net and the network backend. */
 struct net_backend;
 
@@ -45,5 +47,6 @@ int	netbe_send(struct net_backend *be, struct iovec *iov,
                         int iovcnt, int len, int more);
 int	netbe_recv(struct net_backend *be, struct iovec *iov,
 		    int iovcnt, int *more);
+struct ptnetmap_state *netbe_get_ptnetmap(struct net_backend *be);
 
 #endif /* __NET_BACKENDS_H__ */
