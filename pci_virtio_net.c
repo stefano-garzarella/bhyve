@@ -93,6 +93,7 @@ __FBSDID("$FreeBSD$");
 struct virtio_net_config {
 	uint8_t  mac[6];
 	uint16_t status;
+	uint16_t max_virtqueue_pairs;
 } __packed;
 
 /*
@@ -124,6 +125,25 @@ static int pci_vtnet_debug;
 #define DPRINTF(params) if (pci_vtnet_debug) printf params
 #define WPRINTF(params) printf params
 
+
+#define BHYVE_VIRTIO_PTNETMAP
+#ifdef BHYVE_VIRTIO_PTNETMAP
+#include <stddef.h>
+#include <net/if.h>
+#include "net/netmap.h"
+#include "dev/netmap/netmap_virt.h"
+
+struct pci_vtnet_ptnetmap {
+	struct paravirt_csb *csb;	/* Communication Status Block. */
+	uint32_t features;		/* ptnetmap features */
+	int up;				/* ptnetmap up/down */
+	struct ptnetmap_state *state;	/* ptnetmap state (shared with backend) */
+	struct ptnetmap_cfg cfg;	/* ptnetmap configuration */
+
+	/* ptnetmap register */
+	uint8_t reg[PTNEMTAP_VIRTIO_IO_SIZE];
+};
+#endif
 /*
  * Per-device softc
  */
@@ -149,7 +169,14 @@ struct pci_vtnet_softc {
 	pthread_mutex_t	tx_mtx;
 	pthread_cond_t	tx_cond;
 	int		tx_in_progress;
+#ifdef BHYVE_VIRTIO_PTNETMAP
+	struct pci_vtnet_ptnetmap ptn;
+#endif
 };
+
+#ifdef BHYVE_VIRTIO_PTNETMAP
+#include "pci_virtio_ptnetmap.h"
+#endif
 
 static void pci_vtnet_reset(void *);
 /* static void pci_vtnet_notify(void *, struct vqueue_info *); */
@@ -555,6 +582,9 @@ pci_vtnet_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 			WPRINTF(("net backend initialization failed\n"));
 		} else {
 			vc->vc_hv_caps |= netbe_get_features(sc->vsc_be);
+#ifdef BHYVE_VIRTIO_PTNETMAP
+			pci_vtnet_ptnetmap_init(sc, vc);
+#endif /* BHYVE_VIRTIO_PTNETMAP */
 		}
 		free(devname);
 	}
@@ -633,6 +663,10 @@ pci_vtnet_cfgwrite(void *vsc, int offset, int size, uint32_t value)
 		 */
 		ptr = &sc->vsc_config.mac[offset];
 		memcpy(ptr, &value, size);
+#ifdef BHYVE_VIRTIO_PTNETMAP
+	} else if (offset >= PTNETMAP_VIRTIO_IO_BASE) {
+		pci_vtnet_ptnetmap_write(sc, offset, size, value);
+#endif
 	} else {
 		/* silently ignore other writes */
 		DPRINTF(("vtnet: write to readonly reg %d\n\r", offset));
@@ -647,6 +681,12 @@ pci_vtnet_cfgread(void *vsc, int offset, int size, uint32_t *retval)
 	struct pci_vtnet_softc *sc = vsc;
 	void *ptr;
 
+#ifdef BHYVE_VIRTIO_PTNETMAP
+	if (offset >= PTNETMAP_VIRTIO_IO_BASE) {
+		pci_vtnet_ptnetmap_read(sc, offset, size, retval);
+		return (0);
+	}
+#endif
 	ptr = (uint8_t *)&sc->vsc_config + offset;
 	memcpy(retval, ptr, size);
 	return (0);

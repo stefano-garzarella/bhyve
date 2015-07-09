@@ -213,6 +213,15 @@ ptn_memdev_configure(struct ptn_memdev_softc *sc)
 	printf("ptnetmap_memdev: pci_addr: %llx, mem_size: %llu, mem_ptr: %p\n",
 			(unsigned long long) sc->pi->pi_bar[PTNETMAP_MEM_PCI_BAR].addr,
 			(unsigned long long) sc->mem_size, sc->mem_ptr);
+	if (0) {
+		uint64_t i;
+		uint8_t *mem = (uint8_t *)sc->mem_ptr;
+
+		for (i = 0; i < 2900000; i += 100000) {
+			printf("%lu %p %x\n", i, mem,  *mem);
+			mem += i;
+		}
+	}
 	ret = vm_map_user_buf(sc->pi->pi_vmctx, sc->pi->pi_bar[PTNETMAP_MEM_PCI_BAR].addr,
 			sc->mem_size, sc->mem_ptr);
 	if (ret) {

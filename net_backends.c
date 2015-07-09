@@ -48,7 +48,6 @@
 #include "mevent.h"
 #include "dev/virtio/network/virtio_net.h"
 #include "net_backends.h"
-#include "ptnetmap.h"
 
 #include <sys/linker_set.h>
 
@@ -709,7 +708,9 @@ DATA_SET(net_backend_set, netmap_backend);
 /*
  * The ptnetmap backend
  */
-
+#include <stddef.h>
+#include "net/netmap.h"
+#include "dev/netmap/netmap_virt.h"
 #include "ptnetmap.h"
 
 struct ptnbe_priv {
@@ -723,7 +724,6 @@ struct ptnbe_priv {
 
 
 /* The virtio-net features supported by ptnetmap. */
-
 #define VIRTIO_NET_F_PTNETMAP  0x2000000 /* ptnetmap available */
 
 #define PTNETMAP_FEATURES VIRTIO_NET_F_PTNETMAP
