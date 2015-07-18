@@ -91,6 +91,79 @@ pci_vtnet_ptnetmap_get_mem(struct pci_vtnet_softc *sc)
 }
 
 static int
+pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
+{
+	struct ptnetmap_state *ptns = sc->ptn.state;
+	struct paravirt_csb *csb = sc->ptn.csb;
+	int ret;
+
+	if (sc->ptn.up) {
+		printf("ERROR ptnetmap: already UP\n");
+		return -1;
+	}
+
+	if (csb == NULL) {
+		printf("ERROR ptnetmap: CSB undefined\n");
+		return -1;
+	}
+
+	/* TODO-ste: add support for multiqueue */
+
+	/* TODO: Stop processing guest/host IO notifications in qemu.
+	 * Start processing them in ptnetmap.
+	 */
+
+
+	/* Configure the RX ring */
+	sc->ptn.cfg.rx_ring.ioeventfd = -1;
+	sc->ptn.cfg.rx_ring.irqfd = -1;
+
+	/* Configure the TX ring */
+	sc->ptn.cfg.tx_ring.ioeventfd = -1;
+	sc->ptn.cfg.tx_ring.irqfd = -1;
+
+	/* TODO: push fake-elem in the tx/rx queue to enable interrupts */
+
+	/* Initialize CSB */
+	sc->ptn.cfg.csb = sc->ptn.csb;
+	sc->ptn.csb->host_need_txkick = 1;
+	sc->ptn.csb->guest_need_txkick = 0;
+	sc->ptn.csb->guest_need_rxkick = 1;
+	sc->ptn.csb->host_need_rxkick = 1;
+
+	sc->ptn.cfg.features = PTNETMAP_CFG_FEAT_CSB | PTNETMAP_CFG_FEAT_EVENTFD;
+
+	/* Configure the net backend. */
+	ret = ptnetmap_create(sc->ptn.state, &sc->ptn.cfg);
+	if (ret)
+		goto err_ptn_create;
+
+	sc->ptn.up = 1;
+
+	return (0);
+
+err_ptn_create:
+	return (ret);
+}
+
+static int
+pci_vtnet_ptnetmap_down(struct pci_vtnet_softc *sc)
+{
+	int ret;
+
+	if (!sc->ptn.state || !sc->ptn.up) {
+		return (0);
+	}
+
+	sc->ptn.up = 0;
+	/*
+	 * TODO: Start processing guest/host IO notifications in qemu.
+	 */
+
+	return (ptnetmap_delete(sc->ptn.state));
+}
+
+static int
 pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint32_t value)
 {
 	uint32_t *val, ret;
@@ -121,10 +194,10 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint3
 					ret = pci_vtnet_ptnetmap_get_mem(sc);
 					break;
 				case NET_PARAVIRT_PTCTL_REGIF:
-					//ret = virtio_net_ptnetmap_up(sc);
+					ret = pci_vtnet_ptnetmap_up(sc);
 					break;
 				case NET_PARAVIRT_PTCTL_UNREGIF:
-					//ret = virtio_net_ptnetmap_down(sc);
+					ret = pci_vtnet_ptnetmap_down(sc);
 					break;
 				case NET_PARAVIRT_PTCTL_HOSTMEMID:
 					ret = ptnetmap_get_hostmemid(sc->ptn.state);

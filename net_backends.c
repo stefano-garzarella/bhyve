@@ -770,7 +770,7 @@ ptnbe_init(struct net_backend *be, const char *devname,
 	npriv->ifname[sizeof(npriv->ifname) - 1] = '\0';
 
 	memset(&req, 0, sizeof(req));
-	//req.nr_flags |= NR_PASSTHROUGH_HOST;
+	req.nr_flags |= NR_PASSTHROUGH_HOST;
 
 	npriv->nmd = nm_open(npriv->ifname, &req, NETMAP_NO_TX_POLL, NULL);
 	if (npriv->nmd == NULL) {
@@ -822,7 +822,7 @@ ptnbe_cleanup(struct net_backend *be)
 }
 
 struct ptnetmap_state *
-ptnbe_get_ptnetmap (struct net_backend *be)
+ptnbe_get_ptnetmap(struct net_backend *be)
 {
 	struct ptnbe_priv *priv = be->priv;
 
@@ -892,6 +892,8 @@ int
 ptnetmap_create(struct ptnetmap_state *ptns, struct ptnetmap_cfg *conf)
 {
 	struct ptnbe_priv *priv = ptns->ptn_be->priv;
+	struct nmreq req;
+	int err;
 
 	if (!(priv->acked_features & NET_PTN_FEATURES_BASE)) {
 		printf("ptnetmap features not acked\n");
@@ -902,29 +904,30 @@ ptnetmap_create(struct ptnetmap_state *ptns, struct ptnetmap_cfg *conf)
 		return 0;
 
 	/* TODO: ioctl to start kthreads */
-#if 0
+#if 1
 	memset(&req, 0, sizeof(req));
-	pstrcpy(req.nr_name, sizeof(req.nr_name), s->ifname);
+	strncpy(req.nr_name, priv->up.ifname, sizeof(req.nr_name));
 	req.nr_version = NETMAP_API;
 	ptnetmap_write_cfg(&req, conf);
 	req.nr_cmd = NETMAP_PT_HOST_CREATE;
-	err = ioctl(s->nmd->fd, NIOCREGIF, &req);
+	err = ioctl(priv->up.nmd->fd, NIOCREGIF, &req);
 	if (err) {
-	        error_report("Unable to execute NETMAP_PT_HOST_CREATE on %s: %s",
-	                        s->ifname, strerror(errno));
+		printf("Unable to execute NETMAP_PT_HOST_CREATE on %s: %s\n",
+				priv->up.ifname, strerror(errno));
 	} else
-	        ptn->created = true;
+		priv->created = 1;
 #endif
 
-	priv->created = 1;
 
- 	return 0;
+ 	return err;
 }
 
 int
 ptnetmap_delete(struct ptnetmap_state *ptns)
 {
 	struct ptnbe_priv *priv = ptns->ptn_be->priv;
+	struct nmreq req;
+	int err;
 
 	if (!(priv->acked_features & NET_PTN_FEATURES_BASE)) {
 		printf("ptnetmap features not acked\n");
@@ -935,18 +938,15 @@ ptnetmap_delete(struct ptnetmap_state *ptns)
 		return 0;
 
 	/* TODO: ioctl to stop kthreads */
-#if 0
 	memset(&req, 0, sizeof(req));
-	pstrcpy(req.nr_name, sizeof(req.nr_name), s->ifname);
+	strncpy(req.nr_name, priv->up.ifname, sizeof(req.nr_name));
 	req.nr_version = NETMAP_API;
 	req.nr_cmd = NETMAP_PT_HOST_DELETE;
-	err = ioctl(s->nmd->fd, NIOCREGIF, &req);
+	err = ioctl(priv->up.nmd->fd, NIOCREGIF, &req);
 	if (err) {
-	        error_report("Unable to execute NETMAP_PT_HOST_DELETE on %s: %s",
-	                        s->ifname, strerror(errno));
+		printf("Unable to execute NETMAP_PT_HOST_DELETE on %s: %s\n",
+				priv->up.ifname, strerror(errno));
 	}
-#endif
-
 	priv->created = 0;
 
 	return 0;
