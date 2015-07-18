@@ -1,31 +1,6 @@
 #ifndef __PTNETMAP_H__
 #define __PTNETMAP_H__
 
-struct paravirt_csb;
-
-static void
-ptnetmap_configure_csb(struct paravirt_csb** csb, uint32_t csbbal,
-		uint32_t csbbah)
-{
-	uint64_t len = 4096;
-	uint64_t base = ((uint64_t)csbbah << 32) | csbbal;
-
-	/*
-	 * We require that writes to the CSB address registers
-	 * are in the order CSBBAH , CSBBAL so on the second one
-	 * we have a valid 64-bit memory address.
-	 * Any previous region is unmapped, and handlers terminated.
-	 * The CSB is then remapped if the new pointer is != 0
-	 */
-	if (*csb) {
-		/* TODO: unmap */
-	}
-	if (base) {
-		/* TODO: map  *csb = */
-	}
-
-}
-
 struct ptnetmap_state {
 	struct net_backend *ptn_be;
 

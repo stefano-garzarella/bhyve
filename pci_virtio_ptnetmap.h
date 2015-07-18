@@ -9,6 +9,30 @@
 #include "ptnetmap.h"
 
 static void
+ptnetmap_configure_csb(struct vmctx *ctx, struct paravirt_csb** csb, uint32_t csbbal,
+		uint32_t csbbah)
+{
+	uint64_t len = 4096;
+	uint64_t base = ((uint64_t)csbbah << 32) | csbbal;
+
+	/*
+	 * We require that writes to the CSB address registers
+	 * are in the order CSBBAH , CSBBAL so on the second one
+	 * we have a valid 64-bit memory address.
+	 * Any previous region is unmapped, and handlers terminated.
+	 * The CSB is then remapped if the new pointer is != 0
+	 */
+	if (*csb) {
+		/* TODO: unmap */
+		*csb = NULL;
+	}
+	if (base) {
+		*csb = paddr_guest2host(ctx, base, len);
+	}
+
+}
+
+static void
 pci_vtnet_ptnetmap_init(struct pci_vtnet_softc *sc, struct virtio_consts *vc)
 {
 	sc->ptn.up = 0;
@@ -118,7 +142,7 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint3
 		case PTNETMAP_VIRTIO_IO_CSBBAH:
 			break;
 		case PTNETMAP_VIRTIO_IO_CSBBAL:
-			ptnetmap_configure_csb(&sc->ptn.csb, *((uint32_t *)(sc->ptn.reg + PTNETMAP_VIRTIO_IO_CSBBAL)),
+			ptnetmap_configure_csb(sc->vsc_vs.vs_pi->pi_vmctx, &sc->ptn.csb, *((uint32_t *)(sc->ptn.reg + PTNETMAP_VIRTIO_IO_CSBBAL)),
 					*((uint32_t *)(sc->ptn.reg + PTNETMAP_VIRTIO_IO_CSBBAH)));
 			break;
 		default:
