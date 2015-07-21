@@ -125,6 +125,9 @@ ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	struct ptn_memdev_softc *sc = pi->pi_arg;
 	uint64_t ret = 0;
 
+	if (sc == NULL)
+		return 0;
+
 	if (baridx == PTNETMAP_MEM_PCI_BAR) {
 		printf("ptnetmap_memdev: MEM read\n");
 		printf("ptnentmap_memdev: mem_read - offset: %lx size: %d ret: %lx\n", offset, size, ret);
@@ -156,6 +159,9 @@ ptn_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
   		int baridx, uint64_t offset, int size, uint64_t value)
 {
 	struct ptn_memdev_softc *sc = pi->pi_arg;
+
+	if (sc == NULL)
+		return;
 
 	if (baridx == PTNETMAP_MEM_PCI_BAR) {
 		printf("ptnetmap_memdev: MEM write\n");
