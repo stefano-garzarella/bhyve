@@ -95,6 +95,10 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 {
 	struct ptnetmap_state *ptns = sc->ptn.state;
 	struct paravirt_csb *csb = sc->ptn.csb;
+	struct pci_devinst *pi;
+	struct vmctx *vmctx;
+	struct vqueue_info *vq;
+	struct msix_table_entry *mte;
 	int ret;
 
 	if (sc->ptn.up) {
@@ -113,14 +117,26 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	 * Start processing them in ptnetmap.
 	 */
 
+	pi = sc->vsc_vs.vs_pi;
+	vmctx = pi->pi_vmctx;
 
 	/* Configure the RX ring */
 	sc->ptn.cfg.rx_ring.ioeventfd = -1;
-	sc->ptn.cfg.rx_ring.irqfd = -1;
+	sc->ptn.cfg.rx_ring.irqfd = *((int*)vmctx); /* TODO-ste: add vm_get_fd in vmmapi.c */
+	sc->ptn.cfg.rx_ioctl.com = VM_LAPIC_MSI;
+	vq = &sc->vsc_vs->vsc_queues[VTNET_RXQ];
+	mte = &pi->pi_msix.table[vq->vq_msix_idx];
+	sc->ptn.cfg.rx_ioctl.data.msg = mte->msg_data;
+	sc->ptn.cfg.rx_ioctl.data.addr = mte->addr;
 
 	/* Configure the TX ring */
 	sc->ptn.cfg.tx_ring.ioeventfd = -1;
-	sc->ptn.cfg.tx_ring.irqfd = -1;
+	sc->ptn.cfg.tx_ring.irqfd = *((int*)vmctx); /* TODO-ste: add vm_get_fd in vmmapi.c */
+	sc->ptn.cfg.tx_ioctl.com = VM_LAPIC_MSI;
+	vq = &sc->vsc_vs->vsc_queues[VTNET_TXQ];
+	mte = &pi->pi_msix.table[vq->vq_msix_idx];
+	sc->ptn.cfg.tx_ioctl.data.msg = mte->msg_data;
+	sc->ptn.cfg.tx_ioctl.data.addr = mte->addr;
 
 	/* TODO: push fake-elem in the tx/rx queue to enable interrupts */
 
