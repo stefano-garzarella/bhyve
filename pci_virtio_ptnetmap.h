@@ -101,6 +101,8 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	struct vmctx *vmctx;
 	struct vqueue_info *vq;
 	struct msix_table_entry *mte;
+	struct iovec iov[1];
+	uint16_t idx;
 	int ret;
 
 	if (sc->ptn.up) {
@@ -130,6 +132,10 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	mte = &pi->pi_msix.table[vq->vq_msix_idx];
 	sc->ptn.cfg.rx_ioctl.data.msg = mte->msg_data;
 	sc->ptn.cfg.rx_ioctl.data.addr = mte->addr;
+	/* push fake-elem in the rx queue to enable interrupts */
+	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
+		vq_relchain(vq, idx, 0);
+	}
 
 	/* Configure the TX ring */
 	sc->ptn.cfg.tx_ring.ioeventfd = -1;
@@ -139,8 +145,10 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	mte = &pi->pi_msix.table[vq->vq_msix_idx];
 	sc->ptn.cfg.tx_ioctl.data.msg = mte->msg_data;
 	sc->ptn.cfg.tx_ioctl.data.addr = mte->addr;
-
-	/* TODO: push fake-elem in the tx/rx queue to enable interrupts */
+	/* push fake-elem in the tx queue to enable interrupts */
+	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
+		vq_relchain(vq, idx, 0);
+	}
 
 	/* Initialize CSB */
 	sc->ptn.cfg.csb = sc->ptn.csb;
@@ -149,7 +157,8 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	sc->ptn.csb->guest_need_rxkick = 1;
 	sc->ptn.csb->host_need_rxkick = 1;
 
-	sc->ptn.cfg.features = PTNETMAP_CFG_FEAT_CSB | PTNETMAP_CFG_FEAT_EVENTFD;
+	sc->ptn.cfg.features = PTNETMAP_CFG_FEAT_CSB | PTNETMAP_CFG_FEAT_EVENTFD |
+				PTNETMAP_CFG_FEAT_IOCTL;
 
 	/* Configure the net backend. */
 	ret = ptnetmap_create(sc->ptn.state, &sc->ptn.cfg);
