@@ -119,10 +119,6 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 
 	/* TODO-ste: add support for multiqueue */
 
-	/* TODO: Stop processing guest/host IO notifications in qemu.
-	 * Start processing them in ptnetmap.
-	 */
-
 	pi = sc->vsc_vs.vs_pi;
 	vmctx = pi->pi_vmctx;
 
@@ -137,8 +133,17 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
 		vq_relchain(vq, idx, 0);
 	}
-	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY;
-	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 1, VTNET_RXQ, 1, (void *) vq);
+	/*
+	 * Stop processing guest/host IO notifications in bhyve.
+	 * Start processing them in ptnetmap.
+	 */
+	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY; /* enable notification */
+	ret = vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 0,
+			0xFFFFFFFF, VTNET_RXQ, VM_IO_REGH_KWEVENTS, (void *) vq);
+	if (ret != 0) {
+		printf("ERROR ptnetmap: vm_io_reg_handler %d\n", ret);
+		goto err_reg_rx;
+	}
 	sc->ptn.cfg.rx_ring.ioeventfd = (uint64_t) vq;
 
 	/* Configure the TX ring */
@@ -152,8 +157,17 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
 		vq_relchain(vq, idx, 0);
 	}
-	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY;
-	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 1, VTNET_TXQ, 1, (void *) vq);
+	/*
+	 * Stop processing guest/host IO notifications in bhyve.
+	 * Start processing them in ptnetmap.
+	 */
+	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY; /* enable notification */
+	ret = vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 0,
+			0xFFFFFFFF, VTNET_TXQ, VM_IO_REGH_KWEVENTS, (void *) vq);
+	if (ret != 0) {
+		printf("ERROR ptnetmap: vm_io_reg_handler %d\n", ret);
+		goto err_reg_tx;
+	}
 	sc->ptn.cfg.tx_ring.ioeventfd = (uint64_t) vq;
 
 	/* Initialize CSB */
@@ -176,22 +190,38 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	return (0);
 
 err_ptn_create:
+	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 0,
+			0xFFFFFFFF, VTNET_TXQ, VM_IO_REGH_DELETE, 0);
+err_reg_tx:
+	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 0,
+			0xFFFFFFFF, VTNET_RXQ, VM_IO_REGH_DELETE, 0);
+err_reg_rx:
 	return (ret);
 }
 
 static int
 pci_vtnet_ptnetmap_down(struct pci_vtnet_softc *sc)
 {
+	struct pci_devinst *pi;
+	struct vmctx *vmctx;
 	int ret;
 
 	if (!sc->ptn.state || !sc->ptn.up) {
 		return (0);
 	}
 
-	sc->ptn.up = 0;
+	pi = sc->vsc_vs.vs_pi;
+	vmctx = pi->pi_vmctx;
+
 	/*
-	 * TODO: Start processing guest/host IO notifications in qemu.
+	 * Start processing guest/host IO notifications in bhyve.
 	 */
+	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 0,
+			0xFFFFFFFF, VTNET_RXQ, VM_IO_REGH_DELETE, 0);
+	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 0,
+			0xFFFFFFFF, VTNET_TXQ, VM_IO_REGH_DELETE, 0);
+
+	sc->ptn.up = 0;
 
 	return (ptnetmap_delete(sc->ptn.state));
 }
