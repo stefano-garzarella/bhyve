@@ -8,6 +8,8 @@
 #define PTNETMAP_VIRTIO_IO_BASE         sizeof(struct virtio_net_config)
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>	/* VM_LAPIC_MSI */
+#include <vmmapi.h>
+
 #include "ptnetmap.h"
 
 static void
@@ -125,7 +127,6 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	vmctx = pi->pi_vmctx;
 
 	/* Configure the RX ring */
-	sc->ptn.cfg.rx_ring.ioeventfd = -1;
 	sc->ptn.cfg.rx_ring.irqfd = *((int*)vmctx); /* TODO-ste: add vm_get_fd in vmmapi.c */
 	sc->ptn.cfg.rx_ioctl.com = VM_LAPIC_MSI;
 	vq = &sc->vsc_queues[VTNET_RXQ];
@@ -136,9 +137,10 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
 		vq_relchain(vq, idx, 0);
 	}
+	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 1, VTNET_RXQ, 1, (void *) vq);
+	sc->ptn.cfg.rx_ring.ioeventfd = (uint64_t) vq;
 
 	/* Configure the TX ring */
-	sc->ptn.cfg.tx_ring.ioeventfd = -1;
 	sc->ptn.cfg.tx_ring.irqfd = *((int*)vmctx); /* TODO-ste: add vm_get_fd in vmmapi.c */
 	sc->ptn.cfg.tx_ioctl.com = VM_LAPIC_MSI;
 	vq = &sc->vsc_queues[VTNET_TXQ];
@@ -149,6 +151,8 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
 		vq_relchain(vq, idx, 0);
 	}
+	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 1, VTNET_TXQ, 1, (void *) vq);
+	sc->ptn.cfg.tx_ring.ioeventfd = (uint64_t) vq;
 
 	/* Initialize CSB */
 	sc->ptn.cfg.csb = sc->ptn.csb;

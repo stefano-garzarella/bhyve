@@ -46,7 +46,7 @@
 #include <assert.h>
 
 #include "mevent.h"
-#include "dev/virtio/network/virtio_net.h"
+#include <dev/virtio/network/virtio_net.h>
 #include "net_backends.h"
 
 #include <sys/linker_set.h>
