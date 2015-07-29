@@ -137,6 +137,7 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
 		vq_relchain(vq, idx, 0);
 	}
+	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY;
 	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 1, VTNET_RXQ, 1, (void *) vq);
 	sc->ptn.cfg.rx_ring.ioeventfd = (uint64_t) vq;
 
@@ -151,6 +152,7 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
 		vq_relchain(vq, idx, 0);
 	}
+	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY;
 	vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 1, VTNET_TXQ, 1, (void *) vq);
 	sc->ptn.cfg.tx_ring.ioeventfd = (uint64_t) vq;
 
