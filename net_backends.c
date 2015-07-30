@@ -443,6 +443,59 @@ netmap_set_features(struct net_backend *be, uint64_t features)
 	return 0;
 }
 
+/* used by netmap and ptnetmap */
+static int
+netmap_commom_init(struct net_backend *be, struct netmap_priv *priv, uint32_t nr_flags,
+		const char *devname, net_backend_cb_t cb, void *param)
+{
+	const char *ndname = "/dev/netmap";
+	struct nmreq req;
+	char tname[40];
+
+	strncpy(priv->ifname, devname, sizeof(priv->ifname));
+	priv->ifname[sizeof(priv->ifname) - 1] = '\0';
+
+	memset(&req, 0, sizeof(req));
+	req.nr_flags |= nr_flags;
+
+	priv->nmd = nm_open(priv->ifname, &req, NETMAP_NO_TX_POLL, NULL);
+	if (priv->nmd == NULL) {
+		WPRINTF(("Unable to nm_open(): device '%s', "
+				"interface '%s', errno (%s)\n",
+				ndname, devname, strerror(errno)));
+		goto err_open;
+	}
+#if 0
+	/* check parent (nm_desc with the same allocator already mapped) */
+	parent_nmd = netmap_find_parent(nmd);
+	/* mmap or inherit from parent */
+	if (nm_mmap(nmd, parent_nmd)) {
+	        error_report("failed to mmap %s: %s", netmap_opts->ifname, strerror(errno));
+	        nm_close(nmd);
+	        return -1;
+	}
+#endif
+
+	priv->tx = NETMAP_TXRING(priv->nmd->nifp, 0);
+	priv->rx = NETMAP_RXRING(priv->nmd->nifp, 0);
+
+	priv->cb = cb;
+	priv->cb_param = param;
+	priv->rx_continue = 0;
+
+	be->fd = priv->nmd->fd;
+
+	/* Create a thread for netmap poll. */
+	pthread_create(&priv->evloop_tid, NULL, netmap_evloop_thread, (void *)be);
+	snprintf(tname, sizeof(tname), "netmap-evloop-%p", priv);
+	pthread_set_name_np(priv->evloop_tid, tname);
+
+	return 0;
+
+err_open:
+	return -1;
+}
+
 static int
 netmap_init(struct net_backend *be, const char *devname,
 			net_backend_cb_t cb, void *param)
@@ -457,35 +510,15 @@ netmap_init(struct net_backend *be, const char *devname,
 		return -1;
 	}
 
-	strncpy(priv->ifname, devname, sizeof(priv->ifname));
-	priv->ifname[sizeof(priv->ifname) - 1] = '\0';
-
-	priv->nmd = nm_open(priv->ifname, NULL, NETMAP_NO_TX_POLL, NULL);
-	if (priv->nmd == NULL) {
-		WPRINTF(("Unable to nm_open(): device '%s', "
-				"interface '%s', errno (%s)\n",
-				ndname, devname, strerror(errno)));
-		goto err_open;
+	if (netmap_commom_init(be, priv, 0, devname, cb, param)) {
+		goto err;
 	}
 
-	priv->tx = NETMAP_TXRING(priv->nmd->nifp, 0);
-	priv->rx = NETMAP_RXRING(priv->nmd->nifp, 0);
-
-	priv->cb = cb;
-	priv->cb_param = param;
-	priv->rx_continue = 0;
-
-	be->fd = priv->nmd->fd;
 	be->priv = priv;
-
-	/* Create a thread for netmap poll. */
-	pthread_create(&priv->evloop_tid, NULL, netmap_evloop_thread, (void *)be);
-	snprintf(tname, sizeof(tname), "netmap-evloop-%p", priv);
-	pthread_set_name_np(priv->evloop_tid, tname);
 
 	return 0;
 
-err_open:
+err:
 	free(priv);
 
 	return -1;
@@ -708,9 +741,9 @@ DATA_SET(net_backend_set, netmap_backend);
 /*
  * The ptnetmap backend
  */
-#include <stddef.h>
-#include "net/netmap.h"
-#include "dev/netmap/netmap_virt.h"
+#include <stddef.h>			/* IFNAMSIZ */
+#include <net/netmap.h>
+#include <dev/netmap/netmap_virt.h>
 #include "ptnetmap.h"
 
 struct ptnbe_priv {
@@ -720,8 +753,6 @@ struct ptnbe_priv {
 	unsigned long features;		/* ptnetmap features */
 	unsigned long acked_features;	/* ptnetmap acked features */
 };
-
-
 
 /* The virtio-net features supported by ptnetmap. */
 #define VIRTIO_NET_F_PTNETMAP  0x2000000 /* ptnetmap available */
@@ -737,10 +768,6 @@ ptnbe_get_features(struct net_backend *be)
 static uint64_t
 ptnbe_set_features(struct net_backend *be, uint64_t features)
 {
-	if (features & PTNETMAP_FEATURES) {
-		WPRINTF(("ptnbe_set_features\n"));
-	}
-
 	return 0;
 }
 
@@ -763,48 +790,20 @@ ptnbe_init(struct net_backend *be, const char *devname,
 		WPRINTF(("Unable alloc netmap private data\n"));
 		return -1;
 	}
-	WPRINTF(("ptnbe_init(): devname '%s'\n", devname));
 
 	npriv = &priv->up;
-	strncpy(npriv->ifname, devname + PTNETMAP_NAME_HDR, sizeof(npriv->ifname));
-	npriv->ifname[sizeof(npriv->ifname) - 1] = '\0';
 
-	memset(&req, 0, sizeof(req));
-	req.nr_flags |= NR_PASSTHROUGH_HOST;
-
-	npriv->nmd = nm_open(npriv->ifname, &req, NETMAP_NO_TX_POLL, NULL);
-	if (npriv->nmd == NULL) {
-		WPRINTF(("Unable to nm_open(): device '%s', "
-				"interface '%s', errno (%s)\n",
-				ndname, devname, strerror(errno)));
-		goto err_open;
+	if (netmap_commom_init(be, npriv, NR_PASSTHROUGH_HOST, devname + PTNETMAP_NAME_HDR, cb, param)) {
+		goto err;
 	}
-#if 0
-	/* check parent (nm_desc with the same allocator already mapped) */
-	parent_nmd = netmap_find_parent(nmd);
-	/* mmap or inherit from parent */
-	if (nm_mmap(nmd, parent_nmd)) {
-	        error_report("failed to mmap %s: %s", netmap_opts->ifname, strerror(errno));
-	        nm_close(nmd);
-	        return -1;
-	}
-#endif
 
-
-	npriv->tx = NETMAP_TXRING(npriv->nmd->nifp, 0);
-	npriv->rx = NETMAP_RXRING(npriv->nmd->nifp, 0);
-
-	npriv->cb = cb;
-	npriv->cb_param = param;
-
-	be->fd = npriv->nmd->fd;
 	be->priv = priv;
 
 	ptnbe_init_ptnetmap(be);
 
 	return 0;
 
-err_open:
+err:
 	free(priv);
 
 	return -1;
@@ -903,8 +902,7 @@ ptnetmap_create(struct ptnetmap_state *ptns, struct ptnetmap_cfg *conf)
 	if (priv->created)
 		return 0;
 
-	/* TODO: ioctl to start kthreads */
-#if 1
+	/* ioctl to start ptnetmap kthreads */
 	memset(&req, 0, sizeof(req));
 	strncpy(req.nr_name, priv->up.ifname, sizeof(req.nr_name));
 	req.nr_version = NETMAP_API;
@@ -916,8 +914,6 @@ ptnetmap_create(struct ptnetmap_state *ptns, struct ptnetmap_cfg *conf)
 				priv->up.ifname, strerror(errno));
 	} else
 		priv->created = 1;
-#endif
-
 
  	return err;
 }
@@ -937,7 +933,7 @@ ptnetmap_delete(struct ptnetmap_state *ptns)
 	if (!priv->created)
 		return 0;
 
-	/* TODO: ioctl to stop kthreads */
+	/* ioctl to stop ptnetmap kthreads */
 	memset(&req, 0, sizeof(req));
 	strncpy(req.nr_name, priv->up.ifname, sizeof(req.nr_name));
 	req.nr_version = NETMAP_API;
@@ -956,6 +952,8 @@ static struct net_backend ptnbe_backend = {
 	.name = "ptnetmap|ptvale",
 	.init = ptnbe_init,
 	.cleanup = ptnbe_cleanup,
+	.send = netmap_send,
+	.recv = netmap_receive,
 	.get_features = ptnbe_get_features,
 	.set_features = ptnbe_set_features,
 	.get_ptnetmap = ptnbe_get_ptnetmap,

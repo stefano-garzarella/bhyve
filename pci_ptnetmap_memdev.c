@@ -17,22 +17,9 @@ __FBSDID("$FreeBSD$");
 #include "pci_emul.h"
 #include "ptnetmap.h"
 
-
-/* ptnetmap memdev PCI-ID and PCI-BARS XXX-ste: remove*/
-#define PTN_MEMDEV_NAME                 "ptnetmap-memdev"
-#define PTNETMAP_PCI_VENDOR_ID          0x3333  /* XXX-ste: set vendor_id */
-#define PTNETMAP_PCI_DEVICE_ID          0x0001
-#define PTNETMAP_IO_PCI_BAR             0
-#define PTNETMAP_MEM_PCI_BAR            1
-
-/* ptnetmap memdev register */
-/* 32 bit r/o */
-#define PTNETMAP_IO_PCI_FEATURES        0
-/* 32 bit r/o */
-#define PTNETMAP_IO_PCI_MEMSIZE         4
-/* 16 bit r/o */
-#define PTNETMAP_IO_PCI_HOSTID          8
-#define PTNEMTAP_IO_SIZE                10
+#include <net/if.h>			/* IFNAMSIZ */
+#include <net/netmap.h>
+#include <dev/netmap/netmap_virt.h>
 
 struct ptn_memdev_softc {
 	struct pci_devinst *pi;		/* PCI device instance */
@@ -129,8 +116,8 @@ ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 		return 0;
 
 	if (baridx == PTNETMAP_MEM_PCI_BAR) {
-		printf("ptnetmap_memdev: MEM read\n");
-		printf("ptnentmap_memdev: mem_read - offset: %lx size: %d ret: %lx\n", offset, size, ret);
+		printf("ptnetmap_memdev: unexpected MEM read - offset: %lx size: %d ret: %lx\n",
+				offset, size, ret);
 		return 0; /* XXX */
 	}
 
@@ -149,7 +136,6 @@ ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 		break;
 	}
 
-	printf("ptnentmap_memdev: io_read - offset: %lx size: %d ret: %llu\n", offset, size,(unsigned long long)ret);
 
 	return ret;
 }
@@ -164,22 +150,16 @@ ptn_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 		return;
 
 	if (baridx == PTNETMAP_MEM_PCI_BAR) {
-		printf("ptnetmap_memdev: MEM write\n");
-		return; /* XXX */
+		printf("ptnetmap_memdev: unexpected MEM write - offset: %lx size: %d value: %lx\n",
+				offset, size, value);
+		return;
 	}
 
-	/* XXX probably should do something better than just assert() */
-	assert(baridx == PTNETMAP_IO_PCI_BAR);
-
 	switch (offset) {
-
 	default:
 		printf("ptnentmap_memdev: write io reg unexpected\n");
 		break;
 	}
-
-
-	printf("ptnentmap_memdev: io_write - offset: %lx size: %d val: %lx\n", offset, size, value);
 }
 
 static int
@@ -187,11 +167,8 @@ ptn_memdev_configure(struct ptn_memdev_softc *sc)
 {
 	int ret;
 
-	printf("ptnetmap_memdev: configuring\n");
-
 	if (sc->pi == NULL || sc->mem_ptr == NULL)
 		return 0;
-
 
 	/* init iobar */
 	ret = pci_emul_alloc_bar(sc->pi, PTNETMAP_IO_PCI_BAR, PCIBAR_IO, PTNEMTAP_IO_SIZE);
@@ -209,18 +186,12 @@ ptn_memdev_configure(struct ptn_memdev_softc *sc)
 		return ret;
 	}
 
-	printf("ptnetmap_memdev: pci_addr: %llx, mem_size: %llu, mem_ptr: %p\n",
-			(unsigned long long) sc->pi->pi_bar[PTNETMAP_MEM_PCI_BAR].addr,
-			(unsigned long long) sc->mem_size, sc->mem_ptr);
-
 	ret = vm_map_user_buf(sc->pi->pi_vmctx, sc->pi->pi_bar[PTNETMAP_MEM_PCI_BAR].addr,
 			sc->mem_size, sc->mem_ptr);
 	if (ret) {
 		printf("ptnetmap_memdev: membar map error %d\n", ret);
 		return ret;
 	}
-
-	printf("ptnetmap_memdev: configured\n");
 
 	return 0;
 }
@@ -231,8 +202,6 @@ ptn_memdev_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	struct ptn_memdev_softc *sc;
 	uint64_t size;
 	int ret;
-
-	printf("ptnetmap_memdev: loading\n");
 
 	sc = ptn_memdev_find_empty_pi();
 	if (sc == NULL) {
@@ -260,8 +229,6 @@ ptn_memdev_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 		goto err;
 	}
 
-	printf("ptnetmap_memdev: loaded\n");
-
  	return (0);
 err:
 	ptn_memdev_delete(sc);
@@ -274,7 +241,6 @@ ptn_memdev_attach(void *mem_ptr, uint32_t mem_size, uint16_t mem_id)
 {
 	struct ptn_memdev_softc *sc;
 	int ret;
-	printf("ptnetmap_memdev: attaching\n");
 
 	/* if a device with the same mem_id is already attached, we are done */
 	if (ptn_memdev_find_memid(mem_id)) {
@@ -295,17 +261,13 @@ ptn_memdev_attach(void *mem_ptr, uint32_t mem_size, uint16_t mem_id)
 	sc->mem_size = mem_size;
 	sc->mem_id = mem_id;
 
-	printf("ptnetmap_memdev_attach: mem_id: %u, mem_size: %lu, mem_ptr: %p\n", mem_id,
-			(unsigned long) mem_size, mem_ptr);
-
-	/* TODO: configure device BARs */
+	/* configure device BARs */
 	ret = ptn_memdev_configure(sc);
 	if (ret) {
 		printf("ptnetmap_memdev: configure error\n");
 		goto err;
 	}
 
-	printf("ptnetmap_memdev: attached\n");
 
 	return 0;
 err:

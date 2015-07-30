@@ -1,16 +1,15 @@
 #ifndef __PCI_VIRTIO_PTNETMAP_H__
 #define __PCI_VIRTIO_PTNETMAP_H__
 
-/* XXX-ste: move in other file and split in .c .h? */
 #ifdef BHYVE_VIRTIO_PTNETMAP
-
-/* ptnetmap virtio register BASE */
-#define PTNETMAP_VIRTIO_IO_BASE         sizeof(struct virtio_net_config)
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>	/* VM_LAPIC_MSI */
 #include <vmmapi.h>
 
 #include "ptnetmap.h"
+
+/* ptnetmap virtio register BASE */
+#define PTNETMAP_VIRTIO_IO_BASE         sizeof(struct virtio_net_config)
 
 static void
 ptnetmap_configure_csb(struct vmctx *ctx, struct paravirt_csb** csb, uint32_t csbbal,
@@ -27,7 +26,6 @@ ptnetmap_configure_csb(struct vmctx *ctx, struct paravirt_csb** csb, uint32_t cs
 	 * The CSB is then remapped if the new pointer is != 0
 	 */
 	if (*csb) {
-		/* TODO: unmap */
 		*csb = NULL;
 	}
 	if (base) {
@@ -60,8 +58,6 @@ pci_vtnet_ptnetmap_init(struct pci_vtnet_softc *sc, struct virtio_consts *vc)
 
 	/* extend cfgsize. virtio creates PCIBAR for us */
 	vc->vc_cfgsize += PTNEMTAP_VIRTIO_IO_SIZE;
-
-	printf("ptnetmap-virtio init END\n");
 }
 
 static int
@@ -79,17 +75,12 @@ pci_vtnet_ptnetmap_get_mem(struct pci_vtnet_softc *sc)
 	 	printf("ERROR ptnetmap: csb not initialized\n");
 	 	return ret;
 	}
+	/* share netmap_if info to the guest through CSB */
 	csb->nifp_offset = ptns->offset;
 	csb->num_tx_rings = ptns->num_tx_rings;
 	csb->num_rx_rings = ptns->num_rx_rings;
 	csb->num_tx_slots = ptns->num_tx_slots;
 	csb->num_rx_slots = ptns->num_rx_slots;
-	printf("txr %u rxr %u txd %u rxd %u nifp_offset %u\n",
-	 	        csb->num_tx_rings,
-	 	        csb->num_rx_rings,
-	 	        csb->num_tx_slots,
-	 	        csb->num_rx_slots,
-	 	        csb->nifp_offset);
 
 	return ret;
 }
@@ -117,8 +108,7 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 		return -1;
 	}
 
-	/* TODO-ste: add support for multiqueue */
-
+	/* TODO: add support for multiqueue */
 	pi = sc->vsc_vs.vs_pi;
 	vmctx = pi->pi_vmctx;
 
@@ -133,11 +123,12 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
 		vq_relchain(vq, idx, 0);
 	}
+	/* enable rx notification from guest */
+	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY;
 	/*
 	 * Stop processing guest/host IO notifications in bhyve.
 	 * Start processing them in ptnetmap.
 	 */
-	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY; /* enable notification */
 	ret = vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 0,
 			0xFFFFFFFF, VTNET_RXQ, VM_IO_REGH_KWEVENTS, (void *) vq);
 	if (ret != 0) {
@@ -157,11 +148,12 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	if (vq_getchain(vq, &idx, iov, 1, NULL) > 0) {
 		vq_relchain(vq, idx, 0);
 	}
+	/* enable tx notification from guest */
+	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY;
 	/*
 	 * Stop processing guest/host IO notifications in bhyve.
 	 * Start processing them in ptnetmap.
 	 */
-	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY; /* enable notification */
 	ret = vm_io_reg_handler(vmctx, pi->pi_bar[0].addr + VTCFG_R_QNOTIFY, 0,
 			0xFFFFFFFF, VTNET_TXQ, VM_IO_REGH_KWEVENTS, (void *) vq);
 	if (ret != 0) {
@@ -244,7 +236,6 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint3
 			val = (uint32_t *)(sc->ptn.reg + offset);
 			ret = (sc->ptn.features &= *val);
 			ptnetmap_ack_features(sc->ptn.state, sc->ptn.features);
-			printf("ptnetmap acked features: %x\n", sc->ptn.features);
 
 			sc->ptn.reg[PTNETMAP_VIRTIO_IO_PTFEAT] = ret;
 			break;
@@ -272,7 +263,6 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint3
 					ret = 0;
 					break;
 			}
-			printf("PTSTS - ret %d\n", ret);
 			sc->ptn.reg[PTNETMAP_VIRTIO_IO_PTSTS] = ret;
 			break;
 		case PTNETMAP_VIRTIO_IO_CSBBAH:
@@ -284,8 +274,6 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint3
 		default:
 			break;
 	}
-
-	printf("ptnentmap_vtnet: io_write - offset: %d size: %d val: %u\n", offset, size, value);
 
 	return (0);
 }
@@ -310,7 +298,6 @@ pci_vtnet_ptnetmap_read(struct pci_vtnet_softc *sc, int offset, int size, uint32
 			break;
 	}
 #endif
-	printf("ptnentmap_vtnet: io_read - offset: %d size: %d ret: %u\n", offset, size, *value);
 
 	return (0);
 }
