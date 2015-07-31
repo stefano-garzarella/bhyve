@@ -232,47 +232,49 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint3
 	memcpy(&sc->ptn.reg[offset], &value, size);
 
 	switch (offset) {
-		case PTNETMAP_VIRTIO_IO_PTFEAT:
-			val = (uint32_t *)(sc->ptn.reg + offset);
-			ret = (sc->ptn.features &= *val);
-			ptnetmap_ack_features(sc->ptn.state, sc->ptn.features);
+	case PTNETMAP_VIRTIO_IO_PTFEAT:
+		val = (uint32_t *)(sc->ptn.reg + offset);
+		ret = (sc->ptn.features &= *val);
+		ptnetmap_ack_features(sc->ptn.state, sc->ptn.features);
 
-			sc->ptn.reg[PTNETMAP_VIRTIO_IO_PTFEAT] = ret;
-			break;
-		case PTNETMAP_VIRTIO_IO_PTCTL:
-			val = (uint32_t *)(sc->ptn.reg + offset);
+		sc->ptn.reg[PTNETMAP_VIRTIO_IO_PTFEAT] = ret;
+		break;
+	case PTNETMAP_VIRTIO_IO_PTCTL:
+		val = (uint32_t *)(sc->ptn.reg + offset);
 
-			ret = EINVAL;
-			switch(*val) {
-				case NET_PARAVIRT_PTCTL_CONFIG:
-					ret = pci_vtnet_ptnetmap_get_mem(sc);
-					break;
-				case NET_PARAVIRT_PTCTL_REGIF:
-					ret = pci_vtnet_ptnetmap_up(sc);
-					break;
-				case NET_PARAVIRT_PTCTL_UNREGIF:
-					ret = pci_vtnet_ptnetmap_down(sc);
-					break;
-				case NET_PARAVIRT_PTCTL_HOSTMEMID:
-					ret = ptnetmap_get_hostmemid(sc->ptn.state);
-					break;
-				case NET_PARAVIRT_PTCTL_IFNEW:
-				case NET_PARAVIRT_PTCTL_IFDELETE:
-				case NET_PARAVIRT_PTCTL_FINALIZE:
-				case NET_PARAVIRT_PTCTL_DEREF:
-					ret = 0;
-					break;
-			}
-			sc->ptn.reg[PTNETMAP_VIRTIO_IO_PTSTS] = ret;
+		ret = EINVAL;
+		switch(*val) {
+		case NET_PARAVIRT_PTCTL_CONFIG:
+			ret = pci_vtnet_ptnetmap_get_mem(sc);
 			break;
-		case PTNETMAP_VIRTIO_IO_CSBBAH:
+		case NET_PARAVIRT_PTCTL_REGIF:
+			ret = pci_vtnet_ptnetmap_up(sc);
 			break;
-		case PTNETMAP_VIRTIO_IO_CSBBAL:
-			ptnetmap_configure_csb(sc->vsc_vs.vs_pi->pi_vmctx, &sc->ptn.csb, *((uint32_t *)(sc->ptn.reg + PTNETMAP_VIRTIO_IO_CSBBAL)),
-					*((uint32_t *)(sc->ptn.reg + PTNETMAP_VIRTIO_IO_CSBBAH)));
+		case NET_PARAVIRT_PTCTL_UNREGIF:
+			ret = pci_vtnet_ptnetmap_down(sc);
 			break;
-		default:
+		case NET_PARAVIRT_PTCTL_HOSTMEMID:
+			ret = ptnetmap_get_hostmemid(sc->ptn.state);
 			break;
+		case NET_PARAVIRT_PTCTL_IFNEW:
+		case NET_PARAVIRT_PTCTL_IFDELETE:
+		case NET_PARAVIRT_PTCTL_FINALIZE:
+		case NET_PARAVIRT_PTCTL_DEREF:
+			ret = 0;
+			break;
+		}
+		sc->ptn.reg[PTNETMAP_VIRTIO_IO_PTSTS] = ret;
+		break;
+	case PTNETMAP_VIRTIO_IO_CSBBAH:
+		break;
+	case PTNETMAP_VIRTIO_IO_CSBBAL:
+		ptnetmap_configure_csb(sc->vsc_vs.vs_pi->pi_vmctx, &sc->ptn.csb,
+			*((uint32_t *)(sc->ptn.reg + PTNETMAP_VIRTIO_IO_CSBBAL)),
+			*((uint32_t *)(sc->ptn.reg + PTNETMAP_VIRTIO_IO_CSBBAH)));
+		break;
+	default:
+		printf("pci_vtnet_ptnentmap: read io reg unexpected\n");
+		break;
 	}
 
 	return (0);
@@ -291,11 +293,12 @@ pci_vtnet_ptnetmap_read(struct pci_vtnet_softc *sc, int offset, int size, uint32
 	memcpy(value, &sc->ptn.reg[offset], size);
 #if 0
 	switch (offset) {
-		case PTNETMAP_VIRTIO_IO_PTFEAT:
-		case PTNETMAP_VIRTIO_IO_PTSTS:
-			break;
-		default:
-			break;
+	case PTNETMAP_VIRTIO_IO_PTFEAT:
+	case PTNETMAP_VIRTIO_IO_PTSTS:
+		break;
+	default:
+		printf("pci_vtnet_ptnentmap: write io reg unexpected\n");
+		break;
 	}
 #endif
 
