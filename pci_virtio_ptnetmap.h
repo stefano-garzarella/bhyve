@@ -113,7 +113,7 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	vmctx = pi->pi_vmctx;
 
 	/* Configure the RX ring */
-	sc->ptn.cfg.rx_ring.irqfd = *((int*)vmctx); /* TODO-ste: add vm_get_fd in vmmapi.c */
+	sc->ptn.cfg.rx_ring.irqfd = vm_get_fd(vmctx);
 	sc->ptn.cfg.rx_ioctl.com = VM_LAPIC_MSI;
 	vq = &sc->vsc_queues[VTNET_RXQ];
 	mte = &pi->pi_msix.table[vq->vq_msix_idx];
@@ -138,7 +138,7 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 	sc->ptn.cfg.rx_ring.ioeventfd = (uint64_t) vq;
 
 	/* Configure the TX ring */
-	sc->ptn.cfg.tx_ring.irqfd = *((int*)vmctx); /* TODO-ste: add vm_get_fd in vmmapi.c */
+	sc->ptn.cfg.tx_ring.irqfd = vm_get_fd(vmctx);
 	sc->ptn.cfg.tx_ioctl.com = VM_LAPIC_MSI;
 	vq = &sc->vsc_queues[VTNET_TXQ];
 	mte = &pi->pi_msix.table[vq->vq_msix_idx];
