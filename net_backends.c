@@ -755,7 +755,7 @@ struct ptnbe_priv {
 };
 
 /* The virtio-net features supported by ptnetmap. */
-#define VIRTIO_NET_F_PTNETMAP  0x2000000 /* ptnetmap available */
+#define VIRTIO_NET_F_PTNETMAP  0x2000000 /* (25) ptnetmap available */
 
 #define PTNETMAP_FEATURES VIRTIO_NET_F_PTNETMAP
 
@@ -793,7 +793,7 @@ ptnbe_init(struct net_backend *be, const char *devname,
 
 	npriv = &priv->up;
 
-	if (netmap_commom_init(be, npriv, NR_PASSTHROUGH_HOST, devname + PTNETMAP_NAME_HDR, cb, param)) {
+	if (netmap_commom_init(be, npriv, NR_PTNETMAP_HOST, devname + PTNETMAP_NAME_HDR, cb, param)) {
 		goto err;
 	}
 
