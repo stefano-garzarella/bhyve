@@ -815,6 +815,7 @@ ptnbe_cleanup(struct net_backend *be)
 	struct ptnbe_priv *priv = be->priv;
 
 	if (priv) {
+		ptnetmap_delete(&priv->ptns);
 		nm_close(priv->up.nmd);
 	}
 	be->fd = -1;
@@ -925,13 +926,13 @@ ptnetmap_delete(struct ptnetmap_state *ptns)
 	struct nmreq req;
 	int err;
 
+	if (!priv->created)
+		return 0;
+
 	if (!(priv->acked_features & NET_PTN_FEATURES_BASE)) {
 		printf("ptnetmap features not acked\n");
 		return EFAULT;
 	}
-
-	if (!priv->created)
-		return 0;
 
 	/* ioctl to stop ptnetmap kthreads */
 	memset(&req, 0, sizeof(req));

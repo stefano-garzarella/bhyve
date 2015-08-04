@@ -299,7 +299,6 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint3
 			*((uint32_t *)(sc->ptn.reg + PTNETMAP_VIRTIO_IO_CSBBAH)));
 		break;
 	default:
-		printf("pci_vtnet_ptnentmap: read io reg unexpected\n");
 		break;
 	}
 
