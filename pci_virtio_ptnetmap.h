@@ -27,6 +27,21 @@
 #ifndef __PCI_VIRTIO_PTNETMAP_H__
 #define __PCI_VIRTIO_PTNETMAP_H__
 
+/*
+ * ptnetmap support for virtio-net (vtnet) pci device.
+ *
+ * This file contains functions to use virtio-net device in ptnetmap
+ * (netmap passthrough) mode and to handle write/read on ptnetmap registers.
+ * The virtio-net device is used to exchange notification (specific for each
+ * netmap port), instead the netmap memory is shared through ptnetmap-memdev
+ * PCI device because multiple netmap port can share the same allocator.
+ *
+ * The ptnetmap registers are appended to the virtio configuration
+ * space (vc_cfgsize).
+ *
+ * It is based on QEMU/KVM virtio-ptnetmap implementation.
+ */
+
 #ifdef BHYVE_VIRTIO_PTNETMAP
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>	/* VM_LAPIC_MSI */
@@ -37,29 +52,38 @@
 /* ptnetmap virtio register BASE */
 #define PTNETMAP_VIRTIO_IO_BASE         sizeof(struct virtio_net_config)
 
+/*
+ * Get CSB (Communication Status Block) host address.
+ *
+ * The guest allocates the shared CSB and
+ * write its physical address at CSBAL and CSBAH
+ *
+ * We require that writes to the CSB address registers
+ * are in the order CSBBAH , CSBBAL so on the second one
+ * we have a valid 64-bit memory address.
+ * Any previous region is unmapped, and handlers terminated.
+ * The CSB is then remapped if the new pointer is != 0
+ */
 static void
-ptnetmap_configure_csb(struct vmctx *ctx, struct paravirt_csb** csb, uint32_t csbbal,
-		uint32_t csbbah)
+ptnetmap_configure_csb(struct vmctx *ctx, struct paravirt_csb** csb,
+		uint32_t csbbal, uint32_t csbbah)
 {
-	uint64_t len = 4096;
+	uint64_t len = NET_PARAVIRT_CSB_SIZE;
 	uint64_t base = ((uint64_t)csbbah << 32) | csbbal;
 
-	/*
-	 * We require that writes to the CSB address registers
-	 * are in the order CSBBAH , CSBBAL so on the second one
-	 * we have a valid 64-bit memory address.
-	 * Any previous region is unmapped, and handlers terminated.
-	 * The CSB is then remapped if the new pointer is != 0
-	 */
-	if (*csb) {
-		*csb = NULL;
-	}
+	/* CSB configuration */
 	if (base) {
 		*csb = paddr_guest2host(ctx, base, len);
 	}
 
 }
 
+/*
+ * Init ptnetmap state on vtnet initialization
+ *
+ * Check if the backend supports ptnetmap and extend the virtio
+ * cfgsize to add ptnetmap register
+ */
 static void
 pci_vtnet_ptnetmap_init(struct pci_vtnet_softc *sc, struct virtio_consts *vc)
 {
@@ -86,6 +110,10 @@ pci_vtnet_ptnetmap_init(struct pci_vtnet_softc *sc, struct virtio_consts *vc)
 	vc->vc_cfgsize += PTNEMTAP_VIRTIO_IO_SIZE;
 }
 
+/*
+ * Expose the required netmap_if fields about the netmap port
+ * opened in passthrough (ptnetmap) mode to the guest through CSB
+ */
 static int
 pci_vtnet_ptnetmap_get_mem(struct pci_vtnet_softc *sc)
 {
@@ -111,6 +139,14 @@ pci_vtnet_ptnetmap_get_mem(struct pci_vtnet_softc *sc)
 	return ret;
 }
 
+/*
+ * Start ptnetmap mode on virtio-net device
+ *
+ * configure virtio TX/RX ring in ptnetmap mode:
+ * push fake packet per ring to leave enabled the interrupts,
+ * send I/O guest notification (writes on VTCFG_R_QNOTIFY register)
+ * directly to ptnetmap kthread and configure the ptnetmap backend.
+ */
 static int
 pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 {
@@ -217,6 +253,11 @@ err_reg_rx:
 	return (ret);
 }
 
+/*
+ * Stop ptnetmap mode on virtio-net device
+ *
+ * Restore I/O guest notification.
+ */
 static int
 pci_vtnet_ptnetmap_down(struct pci_vtnet_softc *sc)
 {
@@ -244,8 +285,12 @@ pci_vtnet_ptnetmap_down(struct pci_vtnet_softc *sc)
 	return (ptnetmap_delete(sc->ptn.state));
 }
 
+/*
+ * Handle write on ptnetmap register and talk with ptnetmap backend
+ */
 static int
-pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint32_t value)
+pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size,
+		uint32_t value)
 {
 	uint32_t *val, ret;
 
@@ -305,8 +350,12 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size, uint3
 	return (0);
 }
 
+/*
+ * Handle read on ptnetmap register
+ */
 static int
-pci_vtnet_ptnetmap_read(struct pci_vtnet_softc *sc, int offset, int size, uint32_t *value)
+pci_vtnet_ptnetmap_read(struct pci_vtnet_softc *sc, int offset, int size,
+		uint32_t *value)
 {
 	if (sc->ptn.state == NULL) {
 		printf("ERROR ptnetmap: not supported by backend\n");
@@ -322,7 +371,6 @@ pci_vtnet_ptnetmap_read(struct pci_vtnet_softc *sc, int offset, int size, uint32
 	case PTNETMAP_VIRTIO_IO_PTSTS:
 		break;
 	default:
-		printf("pci_vtnet_ptnentmap: write io reg unexpected\n");
 		break;
 	}
 #endif

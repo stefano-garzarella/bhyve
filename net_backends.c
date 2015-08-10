@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2014 Vincenzo Maffione <v.maffione@gmail.com>
+ * Copyright (c) 2014-2015 Vincenzo Maffione, Stefano Garzarella
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -109,6 +109,9 @@ struct net_backend {
 	 */
 	uint64_t (*set_features)(struct net_backend *be, uint64_t features);
 
+	/*
+	 * Get ptnetmap_state if the backend support ptnetmap
+	 */
 	struct ptnetmap_state * (*get_ptnetmap)(struct net_backend *be);
 
 	struct pci_vtnet_softc *sc;
@@ -351,10 +354,10 @@ static struct net_backend tap_backend = {
 
 DATA_SET(net_backend_set, tap_backend);
 
+
 /*
  * The netmap backend
  */
-
 
 /* The virtio-net features supported by netmap. */
 #define NETMAP_FEATURES (VIRTIO_NET_F_CSUM | VIRTIO_NET_F_HOST_TSO4 | \
@@ -443,10 +446,10 @@ netmap_set_features(struct net_backend *be, uint64_t features)
 	return 0;
 }
 
-/* used by netmap and ptnetmap */
+/* used by netmap and ptnetmap during the initialization */
 static int
-netmap_commom_init(struct net_backend *be, struct netmap_priv *priv, uint32_t nr_flags,
-		const char *devname, net_backend_cb_t cb, void *param)
+netmap_commom_init(struct net_backend *be, struct netmap_priv *priv,
+	uint32_t nr_flags, const char *devname, net_backend_cb_t cb, void *param)
 {
 	const char *ndname = "/dev/netmap";
 	struct nmreq req;
@@ -465,16 +468,6 @@ netmap_commom_init(struct net_backend *be, struct netmap_priv *priv, uint32_t nr
 				ndname, devname, strerror(errno)));
 		goto err_open;
 	}
-#if 0
-	/* check parent (nm_desc with the same allocator already mapped) */
-	parent_nmd = netmap_find_parent(nmd);
-	/* mmap or inherit from parent */
-	if (nm_mmap(nmd, parent_nmd)) {
-	        error_report("failed to mmap %s: %s", netmap_opts->ifname, strerror(errno));
-	        nm_close(nmd);
-	        return -1;
-	}
-#endif
 
 	priv->tx = NETMAP_TXRING(priv->nmd->nifp, 0);
 	priv->rx = NETMAP_RXRING(priv->nmd->nifp, 0);
@@ -740,6 +733,8 @@ DATA_SET(net_backend_set, netmap_backend);
 
 /*
  * The ptnetmap backend
+ *
+ * use netmap name with "pt" prefix to open netmap port in ptnetmap mode
  */
 #include <stddef.h>			/* IFNAMSIZ */
 #include <net/netmap.h>
@@ -793,7 +788,8 @@ ptnbe_init(struct net_backend *be, const char *devname,
 
 	npriv = &priv->up;
 
-	if (netmap_commom_init(be, npriv, NR_PTNETMAP_HOST, devname + PTNETMAP_NAME_HDR, cb, param)) {
+	if (netmap_commom_init(be, npriv, NR_PTNETMAP_HOST,
+				devname + PTNETMAP_NAME_HDR, cb, param)) {
 		goto err;
 	}
 
@@ -834,7 +830,8 @@ ptnbe_init_ptnetmap(struct net_backend *be)
 {
 	struct ptnbe_priv *priv = be->priv;
 
-	ptn_memdev_attach(priv->up.nmd->mem, priv->up.nmd->memsize, priv->up.nmd->req.nr_arg2);
+	ptn_memdev_attach(priv->up.nmd->mem, priv->up.nmd->memsize,
+			priv->up.nmd->req.nr_arg2);
 
 	priv->ptns.ptn_be = be;
 	priv->created = 0;
@@ -860,6 +857,7 @@ ptnetmap_ack_features(struct ptnetmap_state *ptns, uint32_t features)
 	priv->acked_features |= features;
 }
 
+/* get required netmap_if info from the netmap port opened in ptnetmap mode */
 int
 ptnetmap_get_mem(struct ptnetmap_state *ptns)
 {
@@ -877,6 +875,7 @@ ptnetmap_get_mem(struct ptnetmap_state *ptns)
 	return 0;
 }
 
+/* get the memory allocator ID info from the netmap port opened in ptnetmap mode */
 int
 ptnetmap_get_hostmemid(struct ptnetmap_state *ptns)
 {
@@ -888,6 +887,7 @@ ptnetmap_get_hostmemid(struct ptnetmap_state *ptns)
 	return npriv->nmd->req.nr_arg2;
 }
 
+/* start ptnetmap mode: send ioctl to the netmap module to create the kthreads */
 int
 ptnetmap_create(struct ptnetmap_state *ptns, struct ptnetmap_cfg *conf)
 {
@@ -919,6 +919,7 @@ ptnetmap_create(struct ptnetmap_state *ptns, struct ptnetmap_cfg *conf)
  	return err;
 }
 
+/* stop ptnetmap mode: send ioctl to the netmap module to delete the kthreads */
 int
 ptnetmap_delete(struct ptnetmap_state *ptns)
 {
@@ -950,7 +951,7 @@ ptnetmap_delete(struct ptnetmap_state *ptns)
 }
 
 static struct net_backend ptnbe_backend = {
-	.name = "ptnetmap|ptvale",
+	.name = "ptnetmap|ptvale", /* use netmap name with "pt" prefix */
 	.init = ptnbe_init,
 	.cleanup = ptnbe_cleanup,
 	.send = netmap_send,
@@ -961,7 +962,6 @@ static struct net_backend ptnbe_backend = {
 };
 
 DATA_SET(net_backend_set, ptnbe_backend);
-
 
 /*
  * make sure a backend is properly initialized

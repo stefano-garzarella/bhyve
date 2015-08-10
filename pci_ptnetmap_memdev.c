@@ -28,24 +28,29 @@
 __FBSDID("$FreeBSD$");
 
 #include <errno.h>
-//#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-//#include <string.h>
-//#include <strings.h>
-//#include <unistd.h>
-//#include <assert.h>
-
-#include <machine/vmm.h>
-#include <vmmapi.h>
-#include "bhyverun.h"
-#include "pci_emul.h"
-#include "ptnetmap.h"
 
 #include <net/if.h>			/* IFNAMSIZ */
 #include <net/netmap.h>
 #include <dev/netmap/netmap_virt.h>
+
+#include <machine/vmm.h>
+#include <vmmapi.h>
+
+#include "bhyverun.h"
+#include "pci_emul.h"
+#include "ptnetmap.h"
+
+/*
+ * ptnetmap memdev PCI device
+ *
+ * This device is used to map netmap memory allocator (the same allocator can
+ * be shared between multiple netmap ports) on the guest VM through PCI_BAR.
+ *
+ * Each netmap allocator has a unique ID assigned by netmap module.
+ */
 
 struct ptn_memdev_softc {
 	struct pci_devinst *pi;		/* PCI device instance */
@@ -59,56 +64,9 @@ struct ptn_memdev_softc {
 static TAILQ_HEAD(, ptn_memdev_softc) ptn_memdevs = TAILQ_HEAD_INITIALIZER(ptn_memdevs);
 
 /*
- * find ptn_memdev through mem_id
+ * ptn_memdev_softc can be created by pe_init or ptnetmap backend,
+ * this depends on the order of initialization.
  */
-static struct ptn_memdev_softc *
-ptn_memdev_find_memid(uint16_t mem_id)
-{
-	struct ptn_memdev_softc *sc;
-
-	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
-		if (sc->mem_ptr != NULL && mem_id == sc->mem_id) {
-			return sc;
-		}
-	}
-
-	return NULL;
-}
-
-/*
- * find ptn_memdev that has not memory
- */
-static struct ptn_memdev_softc *
-ptn_memdev_find_empty_mem()
-{
-	struct ptn_memdev_softc *sc;
-
-	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
-		if (sc->mem_ptr == NULL) {
-			return sc;
-		}
-	}
-
-	return NULL;
-}
-
-/*
- * find ptn_memdev that has not PCI device istance
- */
-static struct ptn_memdev_softc *
-ptn_memdev_find_empty_pi()
-{
-	struct ptn_memdev_softc *sc;
-
-	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
-		if (sc->pi == NULL) {
-			return sc;
-		}
-	}
-
-	return NULL;
-}
-
 static struct ptn_memdev_softc *
 ptn_memdev_create()
 {
@@ -131,6 +89,60 @@ ptn_memdev_delete(struct ptn_memdev_softc *sc)
 	free(sc);
 }
 
+/*
+ * Find ptn_memdev through mem_id (netmap memory allocator ID)
+ */
+static struct ptn_memdev_softc *
+ptn_memdev_find_memid(uint16_t mem_id)
+{
+	struct ptn_memdev_softc *sc;
+
+	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
+		if (sc->mem_ptr != NULL && mem_id == sc->mem_id) {
+			return sc;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * Find ptn_memdev that has not netmap memory (attached by ptnetmap backend)
+ */
+static struct ptn_memdev_softc *
+ptn_memdev_find_empty_mem()
+{
+	struct ptn_memdev_softc *sc;
+
+	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
+		if (sc->mem_ptr == NULL) {
+			return sc;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * Find ptn_memdev that has not PCI device istance (created by pe_init)
+ */
+static struct ptn_memdev_softc *
+ptn_memdev_find_empty_pi()
+{
+	struct ptn_memdev_softc *sc;
+
+	TAILQ_FOREACH(sc, &ptn_memdevs, next) {
+		if (sc->pi == NULL) {
+			return sc;
+		}
+	}
+
+	return NULL;
+}
+
+/*
+ * Handle read on ptnetmap-memdev register
+ */
 static uint64_t
 ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
  		int baridx, uint64_t offset, int size)
@@ -142,13 +154,11 @@ ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 		return 0;
 
 	if (baridx == PTNETMAP_MEM_PCI_BAR) {
-		printf("ptnetmap_memdev: unexpected MEM read - offset: %lx size: %d ret: %lx\n",
+		printf("ptnetmap_memdev: unexpected MEM read - \
+				offset: %lx size: %d ret: %lx\n",
 				offset, size, ret);
-		return 0; /* XXX */
+		return 0;
 	}
-
-	/* XXX probably should do something better than just assert() */
-	assert(baridx == PTNETMAP_IO_PCI_BAR);
 
 	switch (offset) {
 	case PTNETMAP_IO_PCI_MEMSIZE:
@@ -166,6 +176,9 @@ ptn_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	return ret;
 }
 
+/*
+ * Handle write on ptnetmap-memdev register (unused for now)
+ */
 static void
 ptn_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
   		int baridx, uint64_t offset, int size, uint64_t value)
@@ -176,7 +189,8 @@ ptn_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 		return;
 
 	if (baridx == PTNETMAP_MEM_PCI_BAR) {
-		printf("ptnetmap_memdev: unexpected MEM write - offset: %lx size: %d value: %lx\n",
+		printf("ptnetmap_memdev: unexpected MEM write - \
+				offset: %lx size: %d value: %lx\n",
 				offset, size, value);
 		return;
 	}
@@ -188,31 +202,39 @@ ptn_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	}
 }
 
+/*
+ * Configure the ptnetmap-memdev PCI-BARs
+ *
+ * Only if the PCI device is created and netmap memory is attached,
+ * we can create the PCI-BARs.
+ */
 static int
-ptn_memdev_configure(struct ptn_memdev_softc *sc)
+ptn_memdev_configure_bars(struct ptn_memdev_softc *sc)
 {
 	int ret;
 
 	if (sc->pi == NULL || sc->mem_ptr == NULL)
 		return 0;
 
-	/* init iobar */
-	ret = pci_emul_alloc_bar(sc->pi, PTNETMAP_IO_PCI_BAR, PCIBAR_IO, PTNEMTAP_IO_SIZE);
+	/* alloc IO-BAR */
+	ret = pci_emul_alloc_bar(sc->pi, PTNETMAP_IO_PCI_BAR, PCIBAR_IO,
+			PTNEMTAP_IO_SIZE);
 	if (ret) {
 		printf("ptnetmap_memdev: iobar allocation error %d\n", ret);
 		return ret;
 	}
 
-
-	/* init membar */
-	/* XXX MEM64 has MEM_PREFETCH */
-	ret = pci_emul_alloc_bar(sc->pi, PTNETMAP_MEM_PCI_BAR, PCIBAR_MEM32, sc->mem_size);
+	/* alloc MEM-BAR */
+	ret = pci_emul_alloc_bar(sc->pi, PTNETMAP_MEM_PCI_BAR, PCIBAR_MEM32,
+			sc->mem_size);
 	if (ret) {
 		printf("ptnetmap_memdev: membar allocation error %d\n", ret);
 		return ret;
 	}
 
-	ret = vm_map_user_buf(sc->pi->pi_vmctx, sc->pi->pi_bar[PTNETMAP_MEM_PCI_BAR].addr,
+	/* map netmap memory on the MEM-BAR */
+	ret = vm_map_user_buf(sc->pi->pi_vmctx,
+			sc->pi->pi_bar[PTNETMAP_MEM_PCI_BAR].addr,
 			sc->mem_size, sc->mem_ptr);
 	if (ret) {
 		printf("ptnetmap_memdev: membar map error %d\n", ret);
@@ -222,6 +244,9 @@ ptn_memdev_configure(struct ptn_memdev_softc *sc)
 	return 0;
 }
 
+/*
+ * PCI device initialization
+ */
 static int
 ptn_memdev_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 {
@@ -246,10 +271,11 @@ ptn_memdev_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	pci_set_cfgdata16(pi, PCIR_VENDOR, PTNETMAP_PCI_VENDOR_ID);
 	pci_set_cfgdata16(pi, PCIR_DEVICE, PTNETMAP_PCI_DEVICE_ID);
 	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_NETWORK);
-	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, 1); /* XXX-ste remove? */
-	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, PTNETMAP_PCI_VENDOR_ID); /* XXX-ste remove? */
+	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, 1);
+	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, PTNETMAP_PCI_VENDOR_ID);
 
-	ret = ptn_memdev_configure(sc);
+	/* configure device PCI-BARs */
+	ret = ptn_memdev_configure_bars(sc);
 	if (ret) {
 		printf("ptnetmap_memdev: configure error\n");
 		goto err;
@@ -262,6 +288,10 @@ err:
 	return ret;
 }
 
+/*
+ * used by ptnetmap backend to attach the netmap memory allocator to the
+ * ptnetmap-memdev. (shared with the guest VM through PCI-BAR)
+ */
 int
 ptn_memdev_attach(void *mem_ptr, uint32_t mem_size, uint16_t mem_id)
 {
@@ -287,8 +317,8 @@ ptn_memdev_attach(void *mem_ptr, uint32_t mem_size, uint16_t mem_id)
 	sc->mem_size = mem_size;
 	sc->mem_id = mem_id;
 
-	/* configure device BARs */
-	ret = ptn_memdev_configure(sc);
+	/* configure device PCI-BARs */
+	ret = ptn_memdev_configure_bars(sc);
 	if (ret) {
 		printf("ptnetmap_memdev: configure error\n");
 		goto err;
