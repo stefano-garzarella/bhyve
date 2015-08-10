@@ -167,6 +167,8 @@ PCI 16550 serial device.
 .It Li lpc
 LPC PCI-ISA bridge with COM1 and COM2 16550 serial ports. The LPC bridge
 emulation can only be configured on bus 0.
+.It Li ptnetmap-memdev
+Device used to share netmap memory in the guest. (required with ptnetmap backend)
 .El
 .It Op Ar conf
 This optional parameter describes the backend for device emulations.
@@ -178,6 +180,17 @@ considered unconnected.
 Network devices:
 .Bl -tag -width 10n
 .It Ar tapN Ns Op , Ns Ar mac=xx:xx:xx:xx:xx:xx
+.It Ar [pt]netmap:XXX Ns Op , Ns Ar mac=xx:xx:xx:xx:xx:xx
+.It Ar [pt]valeXXX:YYY Ns Op , Ns Ar mac=xx:xx:xx:xx:xx:xx
+Use netmap/vale port as a backend for device emualtions.
+.Pp
+If "pt" prefix is specified, the port is opened in passthrough mode (ptnetmap).
+One
+.Ar ptnetmap-memdev
+emulation is required for each ptnetmap port. (If two or more ptnetmap ports
+share the same netmap memory allocator, only one
+.Ar ptnetmap-memdev
+is required)
 .It Ar vmnetN Ns Op , Ns Ar mac=xx:xx:xx:xx:xx:xx
 .Pp
 If
@@ -283,6 +296,18 @@ bhyve -s 0,hostbridge -s 1,lpc -s 2:0,virtio-net,tap0 \\
   -s 2:2,virtio-net,tap2,mac=00:be:fa:76:45:00 \\
   -s 3,virtio-blk,/my/image -l com1,stdio \\
   -A -H -P -m 24G bigvm
+.Ed
+.Pp
+Run a 2GB single-CPU virtual machine with three network ports which use netmap
+and ptnetmap backends:
+.Bd -literal -offset indent
+bhyve -s 0,hostbridge -s 1,lpc \\
+  -s 2:1,virtio-net,vale0:1 \\
+  -s 2:2,ptnetmap-memdev \\
+  -s 2:3,virtio-net,ptvale1:2 \\
+  -s 3,ptnetmap-memdev \\
+  -s 4,virtio-net,ptnetmap:ix0 \\
+  -l com1,stdio -A -H -P -m 2G netmapvm
 .Ed
 .Pp
 Run an 8GB quad-CPU virtual machine with 8 AHCI SATA disks, an AHCI ATAPI
