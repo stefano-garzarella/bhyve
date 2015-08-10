@@ -50,6 +50,8 @@ __FBSDID("$FreeBSD$");
  * be shared between multiple netmap ports) on the guest VM through PCI_BAR.
  *
  * Each netmap allocator has a unique ID assigned by netmap module.
+ *
+ * It is based on QEMU/KVM ptnetmap-memdev implementation.
  */
 
 struct ptn_memdev_softc {
