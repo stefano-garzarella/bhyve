@@ -220,7 +220,7 @@ ptn_memdev_configure_bars(struct ptn_memdev_softc *sc)
 
 	/* alloc IO-BAR */
 	ret = pci_emul_alloc_bar(sc->pi, PTNETMAP_IO_PCI_BAR, PCIBAR_IO,
-			PTNEMTAP_IO_SIZE);
+			PTNETMAP_IO_SIZE);
 	if (ret) {
 		printf("ptnetmap_memdev: iobar allocation error %d\n", ret);
 		return ret;

@@ -107,7 +107,7 @@ pci_vtnet_ptnetmap_init(struct pci_vtnet_softc *sc, struct virtio_consts *vc)
 	}
 
 	/* extend cfgsize. virtio creates PCIBAR for us */
-	vc->vc_cfgsize += PTNEMTAP_VIRTIO_IO_SIZE;
+	vc->vc_cfgsize += PTNETMAP_VIRTIO_IO_SIZE;
 }
 
 /*
