@@ -493,9 +493,7 @@ static int
 netmap_init(struct net_backend *be, const char *devname,
 			net_backend_cb_t cb, void *param)
 {
-	const char *ndname = "/dev/netmap";
 	struct netmap_priv *priv = NULL;
-	char tname[40];
 
 	priv = calloc(1, sizeof(struct netmap_priv));
 	if (priv == NULL) {
@@ -774,11 +772,8 @@ static int
 ptnbe_init(struct net_backend *be, const char *devname,
 			net_backend_cb_t cb, void *param)
 {
-	const char *ndname = "/dev/netmap";
 	struct ptnbe_priv *priv = NULL;
 	struct netmap_priv *npriv;
-	struct nmreq req;
-	char tname[40];
 
 	priv = calloc(1, sizeof(struct ptnbe_priv));
 	if (priv == NULL) {
