@@ -253,7 +253,6 @@ static int
 ptn_memdev_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 {
 	struct ptn_memdev_softc *sc;
-	uint64_t size;
 	int ret;
 
 	sc = ptn_memdev_find_empty_pi();

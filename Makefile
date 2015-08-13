@@ -56,6 +56,6 @@ CFLAGS = -I${BASEDIR}/netmap/sys -I${M}/include -I/${S}/sys -L${M}/lib
 DPADD=	${LIBVMMAPI} ${LIBMD} ${LIBUTIL} ${LIBPTHREAD}
 LDADD=	-lvmmapi -lmd -lutil -lpthread
 
-WARNS?=	1
+WARNS?=	2
 
 .include <bsd.prog.mk>

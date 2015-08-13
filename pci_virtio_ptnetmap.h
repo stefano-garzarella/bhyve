@@ -235,7 +235,7 @@ pci_vtnet_ptnetmap_up(struct pci_vtnet_softc *sc)
 				PTNETMAP_CFG_FEAT_IOCTL;
 
 	/* Configure the net backend. */
-	ret = ptnetmap_create(sc->ptn.state, &sc->ptn.cfg);
+	ret = ptnetmap_create(ptns, &sc->ptn.cfg);
 	if (ret)
 		goto err_ptn_create;
 
@@ -261,11 +261,11 @@ err_reg_rx:
 static int
 pci_vtnet_ptnetmap_down(struct pci_vtnet_softc *sc)
 {
+	struct ptnetmap_state *ptns = sc->ptn.state;
 	struct pci_devinst *pi;
 	struct vmctx *vmctx;
-	int ret;
 
-	if (!sc->ptn.state || !sc->ptn.up) {
+	if (!ptns || !sc->ptn.up) {
 		return (0);
 	}
 
@@ -282,7 +282,7 @@ pci_vtnet_ptnetmap_down(struct pci_vtnet_softc *sc)
 
 	sc->ptn.up = 0;
 
-	return (ptnetmap_delete(sc->ptn.state));
+	return (ptnetmap_delete(ptns));
 }
 
 /*
@@ -292,9 +292,10 @@ static int
 pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size,
 		uint32_t value)
 {
+	struct ptnetmap_state *ptns = sc->ptn.state;
 	uint32_t *val, ret;
 
-	if (sc->ptn.state == NULL) {
+	if (ptns == NULL) {
 		printf("ERROR ptnetmap: not supported by backend\n");
 		return -1;
 	}
@@ -306,7 +307,7 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size,
 	case PTNETMAP_VIRTIO_IO_PTFEAT:
 		val = (uint32_t *)(sc->ptn.reg + offset);
 		ret = (sc->ptn.features &= *val);
-		ptnetmap_ack_features(sc->ptn.state, sc->ptn.features);
+		ptnetmap_ack_features(ptns, sc->ptn.features);
 
 		sc->ptn.reg[PTNETMAP_VIRTIO_IO_PTFEAT] = ret;
 		break;
@@ -325,7 +326,7 @@ pci_vtnet_ptnetmap_write(struct pci_vtnet_softc *sc, int offset, int size,
 			ret = pci_vtnet_ptnetmap_down(sc);
 			break;
 		case NET_PARAVIRT_PTCTL_HOSTMEMID:
-			ret = ptnetmap_get_hostmemid(sc->ptn.state);
+			ret = ptnetmap_get_hostmemid(ptns);
 			break;
 		case NET_PARAVIRT_PTCTL_IFNEW:
 		case NET_PARAVIRT_PTCTL_IFDELETE:
